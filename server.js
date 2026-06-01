@@ -598,3 +598,26 @@ app.get('/api/debug/admin-info', (req, res) => {
         default_username: ADMIN_USERNAME
     });
 });
+
+// TEMPORARY: Hardcoded admin login (for debugging only - remove later)
+app.post('/api/debug/login', (req, res) => {
+    try {
+        const { username, password } = req.body || {};
+        console.log('DEBUG LOGIN: username =', username, 'password =', password);
+        
+        // Hardcoded credentials - remove after debugging
+        if (username === 'admin' && password === 'admin123') {
+            const token = uuidv4();
+            const sessions = readJsonFile(sessionsFile, []);
+            const session = { id: token, username: username, createdAt: new Date().toISOString() };
+            sessions.push(session);
+            writeJsonFile(sessionsFile, sessions);
+            res.json({ success: true, token: token, session: session, message: 'Debug login successful' });
+        } else {
+            res.status(403).json({ success: false, message: 'Invalid credentials' });
+        }
+    } catch (err) {
+        console.error('Debug login error:', err);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});

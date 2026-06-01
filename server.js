@@ -104,14 +104,7 @@ if (!fs.existsSync(uploadsDir)) {
     fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => cb(null, uploadsDir),
-    filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '_' + Math.round(Math.random() * 1E9);
-        cb(null, uniqueSuffix + '_' + file.originalname);
-    }
-});
-
+const storage = multer.memoryStorage(); 
 const upload = multer({ storage });
 
 // Middleware

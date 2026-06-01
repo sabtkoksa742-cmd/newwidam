@@ -497,8 +497,11 @@ app.post('/api/admin/login', (req, res) => {
         
         console.log('Received username:', username);
         console.log('Received password length:', password ? password.length : 0);
+        console.log('Received password bytes:', Buffer.from(password || '').toString('hex'));
         console.log('Expected username:', settings.admin_username);
         console.log('Expected password length:', settings.admin_password.length);
+        console.log('Expected password bytes:', Buffer.from(settings.admin_password).toString('hex'));
+        console.log('Are passwords equal?:', password === settings.admin_password);
         
         if (!username || !password) {
             console.log('Missing credentials');

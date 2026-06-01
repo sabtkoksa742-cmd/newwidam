@@ -588,3 +588,13 @@ app.post('/api/admin/reset-password', (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
 });
+
+// Debug: Show current admin username (remove in production)
+app.get('/api/debug/admin-info', (req, res) => {
+    const settings = getSettings();
+    res.json({ 
+        admin_username: settings.admin_username,
+        has_backup_password: !!settings.backup_password,
+        default_username: ADMIN_USERNAME
+    });
+});

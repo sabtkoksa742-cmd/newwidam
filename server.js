@@ -573,3 +573,18 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ Unhandled rejection:', reason);
 });
+// ==================== Emergency Password Reset (remove in production) ====================
+app.post('/api/admin/reset-password', (req, res) => {
+    try {
+        const { new_password } = req.body || {};
+        if (!new_password || new_password.length < 4) {
+            return res.status(400).json({ success: false, message: 'Password too short' });
+        }
+        const settings = getSettings();
+        settings.admin_password = String(new_password);
+        writeJsonFile(settingsFile, settings);
+        res.json({ success: true, message: 'Password updated', username: settings.admin_username });
+    } catch (err) {
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});

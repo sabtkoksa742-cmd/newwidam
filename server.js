@@ -720,3 +720,47 @@ async function uploadToSupabaseStorage(file) {
         throw err;
     }
 }
+
+// Debug: Check Supabase Storage status
+app.get('/api/debug/storage-status', async (req, res) => {
+    try {
+        const response = await fetch(
+            `${SUPABASE_URL}/storage/v1/bucket`,
+            {
+                headers: {
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'apikey': SUPABASE_KEY
+                }
+            }
+        );
+        const buckets = await response.json();
+        
+        // Try to list files in product-images bucket
+        let files = [];
+        try {
+            const filesResponse = await fetch(
+                `${SUPABASE_URL}/storage/v1/object/list/product-images`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${SUPABASE_KEY}`,
+                        'apikey': SUPABASE_KEY,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ limit: 10, offset: 0 })
+                }
+            );
+            files = await filesResponse.json();
+        } catch (e) {
+            files = { error: e.message };
+        }
+        
+        res.json({
+            buckets: buckets,
+            productImagesBucket: buckets.find(b => b.id === 'product-images'),
+            filesInProductImages: files
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});

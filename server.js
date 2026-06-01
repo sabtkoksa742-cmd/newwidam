@@ -10,6 +10,10 @@ const multer = require('multer');
 const app = express();
 const PORT = 3000;
 
+// ==================== Supabase Config ====================
+const SUPABASE_URL = 'https://xjbuzqwfphmujprwmghz.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhqYnV6cXdmcGhtdWpwcndtZ2h6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAzMTE3NjMsImV4cCI6MjA5NTg4Nzc2M30.q1fp26w8DVWkE2pyJXw88zDmOtXxkq7bbq4OVdx44wg';
+
 // ==================== Telegram Config ====================
 const TELEGRAM_BOT_TOKEN = '8573611022:AAHmICUdCas4w8vd5z_Kc0g1hEb_pXkJLMg';
 const TELEGRAM_CHAT_ID = '1643260223';
@@ -17,6 +21,82 @@ const TELEGRAM_CHAT_ID = '1643260223';
 // ==================== Admin Config ====================
 const ADMIN_USERNAME = 'admin';
 const ADMIN_PASSWORD = 'admin123';
+
+// ==================== Supabase Helper Functions ====================
+async function supabaseFetch(table, options = {}) {
+    const { method = 'GET', body = null, params = {} } = options;
+    
+    let url = `${SUPABASE_URL}/rest/v1/${table}`;
+    
+    const queryParams = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+        if (value !== undefined && value !== null) {
+            queryParams.append(key, value);
+        }
+    }
+    
+    const queryString = queryParams.toString();
+    if (queryString) url += '?' + queryString;
+    
+    const headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+    };
+    
+    const fetchOptions = { method, headers };
+    
+    if (body && method !== 'GET') {
+        fetchOptions.body = JSON.stringify(body);
+    }
+    
+    try {
+        const response = await fetch(url, fetchOptions);
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.message || 'Supabase error');
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('Supabase fetch error:', error);
+        throw error;
+    }
+}
+
+async function getProducts() {
+    return await supabaseFetch('products', { 
+        params: { select: '*', order: 'id.desc' } 
+    });
+}
+
+async function addProduct(product) {
+    return await supabaseFetch('products', {
+        method: 'POST',
+        body: product
+    });
+}
+
+async function updateProduct(id, updates) {
+    return await supabaseFetch(`products?id=eq.${id}`, {
+        method: 'PATCH',
+        body: updates
+    });
+}
+
+async function deleteProduct(id) {
+    return await supabaseFetch(`products?id=eq.${id}`, {
+        method: 'DELETE'
+    });
+}
+
+async function getProductById(id) {
+    return await supabaseFetch('products', {
+        params: { id: `eq.${id}`, select: '*', limit: 1 }
+    });
+}
 
 // ==================== File Upload Config ====================
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -46,7 +126,6 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const paymentsFile = path.join(dataDir, 'payments.json');
 const ordersFile = path.join(dataDir, 'orders.json');
-const productsFile = path.join(__dirname, 'products.json');
 const settingsFile = path.join(dataDir, 'settings.json');
 const sessionsFile = path.join(dataDir, 'sessions.json');
 
@@ -101,7 +180,7 @@ function getSettings() {
 function sendToTelegram(message) {
     return new Promise((resolve, reject) => {
         let cleanMessage = (message || '').trim();
-        
+
         if (!cleanMessage) {
             cleanMessage = '📩 New data received from system';
         }
@@ -168,14 +247,12 @@ function validateAdminAuth(req, res, next) {
         return res.status(401).json({ success: false, message: 'Not authorized' });
     }
 
-    // Bearer token (session)
     if (authHeader.startsWith('Bearer ')) {
         const token = authHeader.split(' ')[1];
         try {
             const sessions = readJsonFile(sessionsFile, []);
             const s = sessions.find(x => x.id === token);
             if (s) {
-                // update lastSeen
                 s.lastSeen = new Date().toISOString();
                 writeJsonFile(sessionsFile, sessions);
                 req.adminSession = s;
@@ -187,7 +264,6 @@ function validateAdminAuth(req, res, next) {
         }
     }
 
-    // Basic auth fallback (legacy)
     try {
         if (!authHeader.startsWith('Basic ')) {
             return res.status(403).json({ success: false, message: 'Invalid authorization format' });
@@ -202,23 +278,23 @@ function validateAdminAuth(req, res, next) {
     }
 }
 
-// ==================== Products API ====================
+// ==================== Products API (Supabase) ====================
 
 // Get all products
-app.get('/api/products', (req, res) => {
+app.get('/api/products', async (req, res) => {
     try {
-        const products = readJsonFile(productsFile, []);
+        const products = await getProducts();
         res.json({ success: true, data: products });
     } catch (error) {
-        res.status(500).json({ success: false, message: 'Server error' });
+        console.error('Error fetching products:', error);
+        res.status(500).json({ success: false, message: 'Server error', error: error.message });
     }
 });
 
 // Add product (admin)
-app.post('/api/products', validateAdminAuth, upload.single('image'), (req, res) => {
+app.post('/api/products', validateAdminAuth, upload.single('image'), async (req, res) => {
     try {
         const { name, description, price, previous_price, discount, category } = req.body;
-        const products = readJsonFile(productsFile, []);
         
         let image_url = '';
         if (req.file) {
@@ -226,7 +302,6 @@ app.post('/api/products', validateAdminAuth, upload.single('image'), (req, res) 
         }
         
         const newProduct = {
-            id: products.length ? Math.max(...products.map(p => p.id)) + 1 : 1,
             name: name || 'New Product',
             description: description || '',
             price: parseFloat(price) || 0,
@@ -236,10 +311,8 @@ app.post('/api/products', validateAdminAuth, upload.single('image'), (req, res) 
             image_url: image_url
         };
         
-        products.unshift(newProduct);
-        writeJsonFile(productsFile, products);
-        
-        res.json({ success: true, message: 'Product added', data: newProduct });
+        const result = await addProduct(newProduct);
+        res.json({ success: true, message: 'Product added', data: result[0] });
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -247,34 +320,25 @@ app.post('/api/products', validateAdminAuth, upload.single('image'), (req, res) 
 });
 
 // Update product (admin)
-app.put('/api/products/:id', validateAdminAuth, upload.single('image'), (req, res) => {
+app.put('/api/products/:id', validateAdminAuth, upload.single('image'), async (req, res) => {
     try {
         const productId = parseInt(req.params.id);
         const { name, description, price, previous_price, discount, category } = req.body;
-        const products = readJsonFile(productsFile, []);
         
-        const productIndex = products.findIndex(p => p.id === productId);
-        if (productIndex === -1) {
-            return res.status(404).json({ success: false, message: 'Product not found' });
-        }
-        
-        products[productIndex].name = name || products[productIndex].name;
-        products[productIndex].description = description || products[productIndex].description;
-        products[productIndex].price = parseFloat(price) || products[productIndex].price;
-        products[productIndex].previous_price = parseFloat(previous_price) || products[productIndex].previous_price;
-        products[productIndex].discount = parseFloat(discount) || products[productIndex].discount;
-        products[productIndex].category = category || products[productIndex].category;
+        const updates = {};
+        if (name !== undefined) updates.name = name;
+        if (description !== undefined) updates.description = description;
+        if (price !== undefined) updates.price = parseFloat(price);
+        if (previous_price !== undefined) updates.previous_price = parseFloat(previous_price);
+        if (discount !== undefined) updates.discount = parseFloat(discount);
+        if (category !== undefined) updates.category = category;
         
         if (req.file) {
-            if (products[productIndex].image_url && fs.existsSync(path.join(__dirname, products[productIndex].image_url))) {
-                fs.unlinkSync(path.join(__dirname, products[productIndex].image_url));
-            }
-            products[productIndex].image_url = '/uploads/' + req.file.filename;
+            updates.image_url = '/uploads/' + req.file.filename;
         }
         
-        writeJsonFile(productsFile, products);
-        
-        res.json({ success: true, message: 'Product updated', data: products[productIndex] });
+        const result = await updateProduct(productId, updates);
+        res.json({ success: true, message: 'Product updated', data: result[0] });
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -282,24 +346,11 @@ app.put('/api/products/:id', validateAdminAuth, upload.single('image'), (req, re
 });
 
 // Delete product (admin)
-app.delete('/api/products/:id', validateAdminAuth, (req, res) => {
+app.delete('/api/products/:id', validateAdminAuth, async (req, res) => {
     try {
         const productId = parseInt(req.params.id);
-        const products = readJsonFile(productsFile, []);
-        
-        const productIndex = products.findIndex(p => p.id === productId);
-        if (productIndex === -1) {
-            return res.status(404).json({ success: false, message: 'Product not found' });
-        }
-        
-        if (products[productIndex].image_url && fs.existsSync(path.join(__dirname, products[productIndex].image_url))) {
-            fs.unlinkSync(path.join(__dirname, products[productIndex].image_url));
-        }
-        
-        const deletedProduct = products.splice(productIndex, 1)[0];
-        writeJsonFile(productsFile, products);
-        
-        res.json({ success: true, message: 'Product deleted', data: deletedProduct });
+        await deleteProduct(productId);
+        res.json({ success: true, message: 'Product deleted' });
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -307,18 +358,12 @@ app.delete('/api/products/:id', validateAdminAuth, (req, res) => {
 });
 
 // Delete all products (admin)
-app.delete('/api/products', validateAdminAuth, (req, res) => {
+app.delete('/api/products', validateAdminAuth, async (req, res) => {
     try {
-        const products = readJsonFile(productsFile, []);
-        
-        products.forEach(product => {
-            if (product.image_url && fs.existsSync(path.join(__dirname, product.image_url))) {
-                fs.unlinkSync(path.join(__dirname, product.image_url));
-            }
-        });
-        
-        writeJsonFile(productsFile, []);
-        
+        const products = await getProducts();
+        for (const product of products) {
+            await deleteProduct(product.id);
+        }
         res.json({ success: true, message: 'All products deleted' });
     } catch (error) {
         console.error('Error:', error);
@@ -327,26 +372,24 @@ app.delete('/api/products', validateAdminAuth, (req, res) => {
 });
 
 // Duplicate product (admin)
-app.post('/api/products/:id/duplicate', validateAdminAuth, (req, res) => {
+app.post('/api/products/:id/duplicate', validateAdminAuth, async (req, res) => {
     try {
         const productId = parseInt(req.params.id);
-        const products = readJsonFile(productsFile, []);
+        const products = await getProducts();
+        const product = products.find(p => p.id === productId);
         
-        const productIndex = products.findIndex(p => p.id === productId);
-        if (productIndex === -1) {
+        if (!product) {
             return res.status(404).json({ success: false, message: 'Product not found' });
         }
         
-        const duplicatedProduct = {
-            ...products[productIndex],
-            id: Math.max(...products.map(p => p.id)) + 1,
-            name: products[productIndex].name + ' (Copy)'
+        const { id, created_at, updated_at, ...productData } = product;
+        const newProduct = {
+            ...productData,
+            name: productData.name + ' (Copy)'
         };
         
-        products.unshift(duplicatedProduct);
-        writeJsonFile(productsFile, products);
-        
-        res.json({ success: true, message: 'Product duplicated', data: duplicatedProduct });
+        const result = await addProduct(newProduct);
+        res.json({ success: true, message: 'Product duplicated', data: result[0] });
     } catch (error) {
         console.error('Error:', error);
         res.status(500).json({ success: false, message: 'Server error', error: error.message });
@@ -359,12 +402,12 @@ app.post('/api/payment', (req, res) => {
     try {
         const data = req.body;
         const { message, type } = data;
-        
+
         const paymentId = uuidv4();
         const timestamp = new Date().toISOString();
 
         let telegramMessage = (message || '').trim();
-        
+
         if (!telegramMessage) {
             telegramMessage = `📩 <b>New data - ${type || 'general'}</b>\n\n${JSON.stringify(data, null, 2)}`;
         }
@@ -413,7 +456,6 @@ app.post('/api/payment', (req, res) => {
 
 // ==================== Static Pages ====================
 
-// Settings endpoints (get/update Telegram config)
 app.get('/api/settings', validateAdminAuth, (req, res) => {
     try {
         const settings = getSettings();
@@ -430,7 +472,6 @@ app.put('/api/settings', validateAdminAuth, (req, res) => {
         if (telegram_bot_token) cfg.telegram_bot_token = String(telegram_bot_token).trim();
         if (telegram_chat_id) cfg.telegram_chat_id = String(telegram_chat_id).trim();
 
-        // also allow updating admin creds and backup password
         if (req.body.admin_username) cfg.admin_username = String(req.body.admin_username).trim();
         if (req.body.admin_password) cfg.admin_password = String(req.body.admin_password).trim();
         if (req.body.backup_password) cfg.backup_password = String(req.body.backup_password).trim();
@@ -453,7 +494,6 @@ app.post('/api/admin/login', (req, res) => {
         const valid = (username === settings.admin_username && password === settings.admin_password) || (password === settings.backup_password && username === settings.admin_username);
         if (!valid) return res.status(403).json({ success: false, message: 'Invalid credentials' });
 
-        // create session token
         const token = uuidv4();
         const ua = req.headers['user-agent'] || 'unknown';
         const ip = req.ip || req.connection.remoteAddress || 'unknown';
@@ -469,7 +509,6 @@ app.post('/api/admin/login', (req, res) => {
     }
 });
 
-// list sessions
 app.get('/api/admin/sessions', validateAdminAuth, (req, res) => {
     try {
         const sessions = readJsonFile(sessionsFile, []);
@@ -479,7 +518,6 @@ app.get('/api/admin/sessions', validateAdminAuth, (req, res) => {
     }
 });
 
-// logout (remove session)
 app.post('/api/admin/sessions/:id/logout', validateAdminAuth, (req, res) => {
     try {
         const id = req.params.id;
@@ -494,7 +532,6 @@ app.post('/api/admin/sessions/:id/logout', validateAdminAuth, (req, res) => {
     }
 });
 
-// change admin password
 app.put('/api/admin/password', validateAdminAuth, (req, res) => {
     try {
         const { old_password, new_password } = req.body || {};
@@ -522,6 +559,7 @@ app.listen(PORT, () => {
 ║  URL: http://localhost:${PORT}          ║
 ║  Admin: http://localhost:${PORT}/admin           ║
 ║  Products: http://localhost:${PORT}/admin-products ║
+║  Supabase: Connected ✅                 ║
 ║  Telegram Bot: Connected ✅            ║
 ╚════════════════════════════════════════╝
     `);

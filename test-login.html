@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Login</title>
+    <meta charset="utf-8">
+</head>
+<body>
+    <h1>اختبار تسجيل الدخول</h1>
+    <form id="testForm">
+        <input type="text" id="username" value="admin" placeholder="Username"><br><br>
+        <input type="password" id="password" value="admin123" placeholder="Password"><br><br>
+        <button type="submit">تسجيل الدخول</button>
+    </form>
+    <pre id="result"></pre>
+
+    <script>
+        document.getElementById('testForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            document.getElementById('result').textContent = 'جاري الإرسال...';
+            
+            try {
+                const res = await fetch('https://newwidam-23vx.onrender.com/api/admin/login', {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await res.json();
+                document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+            } catch (err) {
+                document.getElementById('result').textContent = 'Error: ' + err.message;
+            }
+        });
+    </script>
+</body>
+</html>

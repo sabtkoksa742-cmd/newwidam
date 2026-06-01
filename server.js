@@ -621,3 +621,28 @@ app.post('/api/debug/login', (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
 });
+
+// Debug: Test login with verbose output (remove in production)
+app.post('/api/debug/login-test', (req, res) => {
+    try {
+        const { username, password } = req.body || {};
+        const settings = getSettings();
+        
+        const adminUserMatch = username === settings.admin_username;
+        const adminPassMatch = password === settings.admin_password;
+        const backupMatch = settings.backup_password && password === settings.backup_password && username === settings.admin_username;
+        
+        res.json({
+            received_username: username,
+            received_password_length: password ? password.length : 0,
+            expected_username: settings.admin_username,
+            expected_password_length: settings.admin_password.length,
+            admin_username_matches: adminUserMatch,
+            admin_password_matches: adminPassMatch,
+            backup_matches: backupMatch,
+            full_check: adminUserMatch && adminPassMatch
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});

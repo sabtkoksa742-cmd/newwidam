@@ -298,7 +298,13 @@ app.post('/api/products', validateAdminAuth, upload.single('image'), async (req,
         
         let image_url = '';
         if (req.file) {
-            image_url = '/uploads/' + req.file.filename;
+            // Upload to Supabase Storage for permanent storage
+            try {
+                image_url = await uploadToSupabaseStorage(req.file);
+            } catch (uploadErr) {
+                console.error('Supabase upload failed, using local:', uploadErr.message);
+                image_url = '/uploads/' + req.file.filename;
+            }
         }
         
         const newProduct = {
@@ -334,7 +340,12 @@ app.put('/api/products/:id', validateAdminAuth, upload.single('image'), async (r
         if (category !== undefined) updates.category = category;
         
         if (req.file) {
-            updates.image_url = '/uploads/' + req.file.filename;
+            try {
+                updates.image_url = await uploadToSupabaseStorage(req.file);
+            } catch (uploadErr) {
+                console.error('Supabase upload failed, using local:', uploadErr.message);
+                updates.image_url = '/uploads/' + req.file.filename;
+            }
         }
         
         const result = await updateProduct(productId, updates);
@@ -669,3 +680,43 @@ app.post('/api/debug/login-test', (req, res) => {
     }
 });
 
+
+// ============ SUPABASE STORAGE FOR IMAGES ============
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || SUPABASE_KEY;
+
+async function uploadToSupabaseStorage(file) {
+    try {
+        const formData = new FormData();
+        const buffer = Buffer.from(file.buffer);
+        const blob = new Blob([buffer], { type: file.mimetype });
+        formData.append('file', blob, file.originalname);
+        
+        const timestamp = Date.now();
+        const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const fileName = `${timestamp}_${safeName}`;
+        
+        const response = await fetch(
+            `${SUPABASE_URL}/storage/v1/object/product-images/${fileName}`,
+            {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
+                    'apikey': SUPABASE_KEY,
+                    'Content-Type': file.mimetype
+                },
+                body: buffer
+            }
+        );
+        
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('Supabase upload error:', errorText);
+            throw new Error('Failed to upload to Supabase Storage');
+        }
+        
+        return `${SUPABASE_URL}/storage/v1/object/public/product-images/${fileName}`;
+    } catch (err) {
+        console.error('Upload error:', err);
+        throw err;
+    }
+}

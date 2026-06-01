@@ -149,36 +149,118 @@ function writeJsonFile(filePath, data) {
     }
 }
 
-// ==================== Telegram Sending ====================
-function getSettings() {
+// ==================== SUPABASE SETTINGS ====================
+let settingsCache = null;
+let settingsCacheTime = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+async function getSettingsFromSupabase() {
     const defaults = {
-        telegram_bot_token: TELEGRAM_BOT_TOKEN,
-        telegram_chat_id: TELEGRAM_CHAT_ID,
-        admin_username: ADMIN_USERNAME,
-        admin_password: ADMIN_PASSWORD,
+        telegram_bot_token: '8573611022:AAHmICUdCas4w8vd5z_Kc0g1hEb_pXkJLMg',
+        telegram_chat_id: '1643260223',
+        admin_username: 'admin',
+        admin_password: 'admin123',
         backup_password: ''
     };
+    
     try {
-        if (fs.existsSync(settingsFile)) {
-            const cfg = JSON.parse(fs.readFileSync(settingsFile, 'utf8')) || {};
-            return Object.assign({}, defaults, cfg);
+        const response = await fetch(
+            `${SUPABASE_URL}/rest/v1/app_settings?id=eq.1`,
+            {
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`
+                }
+            }
+        );
+        
+        if (!response.ok) {
+            console.error('Failed to fetch settings from Supabase');
+            return defaults;
+        }
+        
+        const data = await response.json();
+        if (data && data.length > 0) {
+            return {
+                telegram_bot_token: data[0].telegram_bot_token || defaults.telegram_bot_token,
+                telegram_chat_id: data[0].telegram_chat_id || defaults.telegram_chat_id,
+                admin_username: data[0].admin_username || defaults.admin_username,
+                admin_password: data[0].admin_password || defaults.admin_password,
+                backup_password: data[0].backup_password || defaults.backup_password
+            };
         }
         return defaults;
     } catch (err) {
-        console.error('Error reading settings:', err);
+        console.error('Error reading settings from Supabase:', err);
         return defaults;
     }
 }
 
-function sendToTelegram(message) {
-    return new Promise((resolve, reject) => {
+async function getSettings() {
+    const now = Date.now();
+    if (settingsCache && (now - settingsCacheTime < CACHE_DURATION)) {
+        return settingsCache;
+    }
+    settingsCache = await getSettingsFromSupabase();
+    settingsCacheTime = now;
+    return settingsCache;
+}
+
+function clearSettingsCache() {
+    settingsCache = null;
+    settingsCacheTime = 0;
+}
+
+async function saveSettingsToSupabase(settings) {
+    try {
+        const response = await fetch(
+            `${SUPABASE_URL}/rest/v1/app_settings?id=eq.1`,
+            {
+                method: 'PATCH',
+                headers: {
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_KEY}`,
+                    'Content-Type': 'application/json',
+                    'Prefer': 'return=representation'
+                },
+                body: JSON.stringify({
+                    admin_username: settings.admin_username,
+                    admin_password: settings.admin_password,
+                    backup_password: settings.backup_password,
+                    telegram_bot_token: settings.telegram_bot_token,
+                    telegram_chat_id: settings.telegram_chat_id,
+                    updated_at: new Date().toISOString()
+                })
+            }
+        );
+        
+        if (!response.ok) {
+            console.error('Failed to save settings');
+            return false;
+        }
+        clearSettingsCache();
+        return true;
+    } catch (err) {
+        console.error('Error saving settings:', err);
+        return false;
+    }
+}
+
+async function saveSettingsToFile(data) {
+    return saveSettingsToSupabase(data);
+}
+
+// ==================== Telegram Sending ====================
+
+async function sendToTelegram(message) {
+    return new Promise(async (resolve, reject) => {
         let cleanMessage = (message || '').trim();
 
         if (!cleanMessage) {
             cleanMessage = '📩 New data received from system';
         }
 
-        const settings = getSettings();
+        const settings = await getSettings();
         const botToken = settings.telegram_bot_token;
         const chatId = settings.telegram_chat_id;
 
@@ -232,9 +314,9 @@ function sendToTelegram(message) {
 }
 
 // ==================== Admin Authentication ====================
-function validateAdminAuth(req, res, next) {
+async function validateAdminAuth(req, res, next) {
     const authHeader = req.headers['authorization'];
-    const settings = getSettings();
+    const settings = await getSettings();
 
     if (!authHeader) {
         return res.status(401).json({ success: false, message: 'Not authorized' });
@@ -460,19 +542,19 @@ app.post('/api/payment', (req, res) => {
 
 // ==================== Static Pages ====================
 
-app.get('/api/settings', validateAdminAuth, (req, res) => {
+app.get('/api/settings', validateAdminAuth, async (req, res) => {
     try {
-        const settings = getSettings();
+        const settings = await getSettings();
         res.json({ success: true, data: settings });
     } catch (error) {
         res.status(500).json({ success: false, message: 'Error reading settings' });
     }
 });
 
-app.put('/api/settings', validateAdminAuth, (req, res) => {
+app.put('/api/settings', validateAdminAuth, async (req, res) => {
     try {
         const { telegram_bot_token, telegram_chat_id } = req.body || {};
-        const cfg = getSettings();
+        const cfg = await getSettings();
         if (telegram_bot_token) cfg.telegram_bot_token = String(telegram_bot_token).trim();
         if (telegram_chat_id) cfg.telegram_chat_id = String(telegram_chat_id).trim();
 
@@ -480,7 +562,7 @@ app.put('/api/settings', validateAdminAuth, (req, res) => {
         if (req.body.admin_password) cfg.admin_password = String(req.body.admin_password).trim();
         if (req.body.backup_password) cfg.backup_password = String(req.body.backup_password).trim();
 
-        writeJsonFile(settingsFile, cfg);
+        await saveSettingsToSupabase(cfg);
         res.json({ success: true, message: 'Settings saved', data: cfg });
     } catch (error) {
         console.error('Error saving settings:', error);
@@ -490,14 +572,14 @@ app.put('/api/settings', validateAdminAuth, (req, res) => {
 
 // ==================== Admin login / sessions ====================
 // LOGIN ENDPOINT WITH DEBUG
-app.post('/api/admin/login', (req, res) => {
+app.post('/api/admin/login', async (req, res) => {
     console.log('=== LOGIN DEBUG ===');
     console.log('Body:', JSON.stringify(req.body));
     console.log('Content-Type:', req.headers['content-type']);
     
     try {
         const { username, password } = req.body || {};
-        const settings = getSettings();
+        const settings = await getSettings();
         
         console.log('Received username:', username);
         console.log('Received password length:', password ? password.length : 0);
@@ -558,14 +640,14 @@ app.post('/api/admin/sessions/:id/logout', validateAdminAuth, (req, res) => {
     }
 });
 
-app.put('/api/admin/password', validateAdminAuth, (req, res) => {
+app.put('/api/admin/password', validateAdminAuth, async (req, res) => {
     try {
         const { old_password, new_password } = req.body || {};
         if (!old_password || !new_password) return res.status(400).json({ success: false, message: 'Missing fields' });
-        const settings = getSettings();
+        const settings = await getSettings();
         if (old_password !== settings.admin_password) return res.status(403).json({ success: false, message: 'Old password incorrect' });
         settings.admin_password = String(new_password);
-        writeJsonFile(settingsFile, settings);
+        await saveSettingsToSupabase(settings);
         res.json({ success: true, message: 'Password changed' });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Server error' });
@@ -600,15 +682,15 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('❌ Unhandled rejection:', reason);
 });
 // ==================== Emergency Password Reset (remove in production) ====================
-app.post('/api/admin/reset-password', (req, res) => {
+app.post('/api/admin/reset-password', async (req, res) => {
     try {
         const { new_password } = req.body || {};
         if (!new_password || new_password.length < 4) {
             return res.status(400).json({ success: false, message: 'Password too short' });
         }
-        const settings = getSettings();
+        const settings = await getSettings();
         settings.admin_password = String(new_password);
-        writeJsonFile(settingsFile, settings);
+        await saveSettingsToSupabase(settings);
         res.json({ success: true, message: 'Password updated', username: settings.admin_username });
     } catch (err) {
         res.status(500).json({ success: false, message: 'Server error' });
@@ -616,8 +698,8 @@ app.post('/api/admin/reset-password', (req, res) => {
 });
 
 // Debug: Show current admin username (remove in production)
-app.get('/api/debug/admin-info', (req, res) => {
-    const settings = getSettings();
+app.get('/api/debug/admin-info', async (req, res) => {
+    const settings = await getSettings();
     res.json({ 
         admin_username: settings.admin_username,
         has_backup_password: !!settings.backup_password,
@@ -649,10 +731,10 @@ app.post('/api/debug/login', (req, res) => {
 });
 
 // Debug: Test login with verbose output (remove in production)
-app.post('/api/debug/login-test', (req, res) => {
+app.post('/api/debug/login-test', async (req, res) => {
     try {
         const { username, password } = req.body || {};
-        const settings = getSettings();
+        const settings = await getSettings();
         
         const adminUserMatch = username === settings.admin_username;
         const adminPassMatch = password === settings.admin_password;

@@ -527,7 +527,6 @@ app.post('/api/admin/login', (req, res) => {
         res.status(500).json({ success: false, message: 'Server error' });
     }
 });
-});
 
 app.get('/api/admin/sessions', validateAdminAuth, (req, res) => {
     try {

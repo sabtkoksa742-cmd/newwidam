@@ -485,14 +485,33 @@ app.put('/api/settings', validateAdminAuth, (req, res) => {
 });
 
 // ==================== Admin login / sessions ====================
+// LOGIN ENDPOINT WITH DEBUG
 app.post('/api/admin/login', (req, res) => {
+    console.log('=== LOGIN DEBUG ===');
+    console.log('Body:', JSON.stringify(req.body));
+    console.log('Content-Type:', req.headers['content-type']);
+    
     try {
         const { username, password } = req.body || {};
         const settings = getSettings();
-        if (!username || !password) return res.status(400).json({ success: false, message: 'Missing credentials' });
+        
+        console.log('Received username:', username);
+        console.log('Received password length:', password ? password.length : 0);
+        console.log('Expected username:', settings.admin_username);
+        console.log('Expected password length:', settings.admin_password.length);
+        
+        if (!username || !password) {
+            console.log('Missing credentials');
+            return res.status(400).json({ success: false, message: 'Missing credentials' });
+        }
 
-        const valid = (username === settings.admin_username && password === settings.admin_password) || (password === settings.backup_password && username === settings.admin_username);
-        if (!valid) return res.status(403).json({ success: false, message: 'Invalid credentials' });
+        const valid = (username === settings.admin_username && password === settings.admin_password);
+        console.log('Validation result:', valid);
+        
+        if (!valid) {
+            console.log('Invalid credentials - settings might be different');
+            return res.status(403).json({ success: false, message: 'Invalid credentials' });
+        }
 
         const token = uuidv4();
         const ua = req.headers['user-agent'] || 'unknown';
@@ -507,6 +526,7 @@ app.post('/api/admin/login', (req, res) => {
         console.error('Login error:', err);
         res.status(500).json({ success: false, message: 'Server error' });
     }
+});
 });
 
 app.get('/api/admin/sessions', validateAdminAuth, (req, res) => {
@@ -646,3 +666,4 @@ app.post('/api/debug/login-test', (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+

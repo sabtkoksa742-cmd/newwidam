@@ -686,14 +686,14 @@ const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_KEY || SUPABASE_KEY;
 
 async function uploadToSupabaseStorage(file) {
     try {
-        const formData = new FormData();
         const buffer = Buffer.from(file.buffer);
-        const blob = new Blob([buffer], { type: file.mimetype });
-        formData.append('file', blob, file.originalname);
-        
         const timestamp = Date.now();
         const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_');
         const fileName = `${timestamp}_${safeName}`;
+        
+        console.log('=== SUPABASE UPLOAD ===');
+        console.log('Service Key available:', (SUPABASE_SERVICE_KEY !== SUPABASE_KEY));
+        console.log('File:', fileName);
         
         const response = await fetch(
             `${SUPABASE_URL}/storage/v1/object/product-images/${fileName}`,
@@ -702,21 +702,24 @@ async function uploadToSupabaseStorage(file) {
                 headers: {
                     'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
                     'apikey': SUPABASE_KEY,
-                    'Content-Type': file.mimetype
+                    'Content-Type': file.mimetype,
+                    'x-upsert': 'true'
                 },
                 body: buffer
             }
         );
         
+        console.log('Upload status:', response.status);
+        
         if (!response.ok) {
             const errorText = await response.text();
-            console.error('Supabase upload error:', errorText);
-            throw new Error('Failed to upload to Supabase Storage');
+            console.error('Supabase error:', errorText);
+            throw new Error('Upload failed: ' + errorText);
         }
         
         return `${SUPABASE_URL}/storage/v1/object/public/product-images/${fileName}`;
     } catch (err) {
-        console.error('Upload error:', err);
+        console.error('Upload error:', err.message);
         throw err;
     }
 }
